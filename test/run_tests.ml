@@ -4,6 +4,7 @@ let tests = "all tests" >:::
   ["ic.ml tests" >: Ic_test.tests]
 
 let _ = 
+  let _ = Random.self_init () in 
   let results = run_test_tt_main tests in 
   let nfail = 
     List.fold_left
