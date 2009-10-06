@@ -2,7 +2,8 @@ open OUnit
 
 module B = Advancer.A
 module Ic = Ics.Make(B)
-module E = Energy.Make(B)
+module A = Analysis.Make(B)
+module E = A.E
 
 let test_plummer_energies () = 
   let bs = Ic.make_plummer 1000 in 
