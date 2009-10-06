@@ -2,4 +2,6 @@
 
 <test/*.ml> : use_oUnit
 
+<**/*.ml> or <**/*.{native,byte}> : debug
+
 <test/*.{native,byte}> : use_unix, use_oUnit
