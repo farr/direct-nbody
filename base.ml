@@ -27,29 +27,21 @@ let set_eps eps =
   eps2 := square eps;;
 
 let norm_squared v = 
-  let sum = ref 0.0 in 
-  for i = 0 to 2 do 
-    sum := !sum +. square v.(i)
-  done;
-  !sum +. 0.0;;
+  let x = v.(0) and y = v.(1) and z = v.(2) in 
+  x*.x +. y*.y +. z*.z
 
 let norm v = sqrt (norm_squared v);;
 
 let distance_squared x y = 
-  let sum = ref 0.0 in 
-  for i = 0 to 2 do 
-    sum := !sum +. square (x.(i) -. y.(i))
-  done;
-  !sum +. 0.0;;
+  let dx = x.(0) -. y.(0) and 
+      dy = x.(1) -. y.(1) and 
+      dz = x.(2) -. y.(2) in 
+  dx*.dx +. dy*.dy +. dz*.dz
 
 let distance x y = sqrt (distance_squared x y);;
 
 let dot x y = 
-  let sum = ref 0.0 in 
-  for i = 0 to 2 do 
-    sum := !sum +. x.(i)*.y.(i)
-  done;
-  !sum +. 0.0;;
+  x.(0)*.y.(0) +. x.(1) *.y.(1) +. x.(2)*.y.(2)
 
 let v m1 q1 m2 q2 = 
   let r2 = distance_squared q1 q2 in 
@@ -61,15 +53,17 @@ let grad_v m1 q1 m2 q2 gv =
   let re = r2 +. !eps2 in 
   let r3 = re*.(sqrt re) in 
   let factor = m1*.m2/.r3 in 
-  for i = 0 to 2 do 
-    gv.(i) <- factor*.(q1.(i) -. q2.(i))
-  done;;
+  gv.(0) <- factor*.(q1.(0) -. q2.(0));
+  gv.(1) <- factor*.(q1.(1) -. q2.(1));
+  gv.(2) <- factor*.(q1.(2) -. q2.(2))
 
 let grad_v_dgrad_v m1 q1 p1 m2 q2 p2 gv dgv = 
-  for i = 0 to 2 do
-    gv.(i) <- q1.(i) -. q2.(i);
-    dgv.(i) <- p1.(i)/.m1 -. p2.(i)/.m2
-  done;
+  gv.(0) <- q1.(0) -. q2.(0);
+  dgv.(0) <- p1.(0)/.m1 -. p2.(0)/.m2;
+  gv.(1) <- q1.(1) -. q2.(1);
+  dgv.(1) <- p1.(1)/.m1 -. p2.(1)/.m2;
+  gv.(2) <- q1.(2) -. q2.(2);
+  dgv.(2) <- p1.(2)/.m1 -. p2.(2)/.m2;
   let r2 = norm_squared gv and 
       rdv = dot gv dgv in 
   let re = r2 +. !eps2 in 
@@ -77,10 +71,12 @@ let grad_v_dgrad_v m1 q1 p1 m2 q2 p2 gv dgv =
   let r5 = r3*.re in 
   let factorg = m1*.m2/.r3 in
   let factord = 3.0*.rdv*.m1*.m2/.r5 in 
-  for i = 0 to 2 do 
-    dgv.(i) <- factorg*.dgv.(i) -. factord*.gv.(i);
-    gv.(i) <- factorg*.gv.(i)
-  done;;
+  dgv.(0) <- factorg*.dgv.(0) -. factord*.gv.(0);
+  gv.(0) <- factorg*.gv.(0);
+  dgv.(1) <- factorg*.dgv.(1) -. factord*.gv.(1);
+  gv.(1) <- factorg*.gv.(1);
+  dgv.(2) <- factorg*.dgv.(2) -. factord*.gv.(2);
+  gv.(2) <- factorg*.gv.(2)
 
 let relative_error x t = 
   abs_float ((x -. t) /. t);;
