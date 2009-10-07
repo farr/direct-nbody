@@ -1,4 +1,4 @@
-<test> : include
+<test> or <bin>: include
 
 <test/*.ml> : use_oUnit
 

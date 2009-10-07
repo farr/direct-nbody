@@ -3,3 +3,5 @@ _build
 *.docdir
 *.native
 *.byte
+runs
+*.dat
