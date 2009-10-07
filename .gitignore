@@ -1,2 +1,5 @@
 *~
 _build
+*.docdir
+*.native
+*.byte
