@@ -64,6 +64,9 @@ let _ =
     | Hard_binary(time, _) -> 
         Printf.eprintf "Found binary at time %g\n" time;
         Printf.printf "%g\n" time
+    | I.Eg_err(bs) -> 
+        Printf.eprintf "Aborting due to energy error";
+        Printf.printf "%g\n" nan
     | _ -> 
-        Printf.eprintf "Aborting computation due to error"
+        Printf.eprintf "Aborting computation due unspecified error"
   done
