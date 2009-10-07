@@ -18,14 +18,16 @@ let nrep = ref 100
 let dt = ref 0.1
 let tmax = ref 250.0
 let errmax = ref 1e-6
+let ktfac = ref 5.0
 
 let _ = 
   Arg.parse 
-    [("-n", Arg.Set_int n, "the number of bodies to evolve");
-     ("-nrep", Arg.Set_int nrep, "the number of separate evolutions");
-     ("-dt", Arg.Set_float dt, "the time interval to check for hard binaries");
-     ("-tmax", Arg.Set_float tmax, "the maximum evolution time");
-     ("-errmax", Arg.Set_float errmax, "the maximum relative energy error")]
+    [("-n", Arg.Set_int n, "number of bodies to evolve");
+     ("-nrep", Arg.Set_int nrep, "number of separate evolutions");
+     ("-dt", Arg.Set_float dt, "time interval to check for hard binaries");
+     ("-tmax", Arg.Set_float tmax, "maximum evolution time");
+     ("-errmax", Arg.Set_float errmax, "maximum relative energy error");
+     ("-ktfac", Arg.Set_float ktfac, "number of kT for 'hard' binary")]
     (fun _ -> ())
     "bft [OPTIONS ...]"
 
