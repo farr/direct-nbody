@@ -44,9 +44,13 @@ let isnan x = match classify_float x with
 | FP_nan -> true
 | _ -> false
 
-let bootstrap_median xs = 
+let bootstrap_median xs_in = 
   let xs = 
-    Array.of_list (List.filter (fun x -> not (isnan x)) (Array.to_list xs)) in
+    Array.of_list (List.filter (fun x -> not (isnan x)) (Array.to_list xs_in)) in
+  if 
+    (float_of_int (Array.length xs)) /. (float_of_int (Array.length xs_in)) < 0.9
+  then 
+    Printf.eprintf "Warning: more than 10%% nan's in data.";
   let meds = Array.make !nsamp 0.0 in 
   for i = 0 to !nsamp - 1 do 
     meds.(i) <- median (bootstrap xs)
