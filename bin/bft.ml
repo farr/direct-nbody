@@ -17,8 +17,9 @@ let n = ref 25
 let nrep = ref 100
 let dt = ref 0.1
 let tmax = ref 250.0
-let errmax = ref 1e-6
+let errmax = ref 1e-3
 let ktfac = ref 5.0
+let sf = ref 1e-9
 
 let _ = 
   Arg.parse 
@@ -27,7 +28,8 @@ let _ =
      ("-dt", Arg.Set_float dt, "time interval to check for hard binaries");
      ("-tmax", Arg.Set_float tmax, "maximum evolution time");
      ("-errmax", Arg.Set_float errmax, "maximum relative energy error");
-     ("-ktfac", Arg.Set_float ktfac, "number of kT for 'hard' binary")]
+     ("-ktfac", Arg.Set_float ktfac, "number of kT for 'hard' binary");
+     ("-sf", Arg.Set_float sf, "timestep safety factor")]
     (fun _ -> ())
     "bft [OPTIONS ...]"
 
@@ -47,7 +49,7 @@ let _ =
         I.constant_sf_integrate
           ~ci:!dt
           ~max_eg_err:!errmax
-          ~sf:1e-8
+          ~sf:!sf
           ~filter:(fun bs -> 
             let temp = A.body_temperature bs in 
             let (b1,b2) = A.tightest_binary bs in 
