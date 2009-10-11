@@ -63,14 +63,14 @@ let _ =
       let e1 = E.energy new_bs in 
       Printf.eprintf "Integrated system to %g, rel error = %g, no hard binary.\n"
         (B.t new_bs.(0)) (abs_float ((e0 -. e1)/.e0));
-      Printf.printf "%g\n" infinity
+      Printf.printf "%g\n%!" infinity
     with 
     | Hard_binary(time, _) -> 
         Printf.eprintf "Found binary at time %g\n" time;
-        Printf.printf "%g\n" time
+        Printf.printf "%g\n%!" time
     | I.Eg_err(bs) -> 
         Printf.eprintf "Aborting due to energy error\n";
-        Printf.printf "%g\n" nan
+        Printf.printf "%g\n%!" nan
     | _ -> 
         Printf.eprintf "Aborting computation due unspecified error\n"
   done
