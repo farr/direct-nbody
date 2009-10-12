@@ -72,5 +72,6 @@ let _ =
         Printf.eprintf "Aborting due to energy error\n";
         Printf.printf "%g\n%!" nan
     | _ -> 
-        Printf.eprintf "Aborting computation due unspecified error\n"
+        Printf.eprintf "Aborting computation due unspecified error\n";
+        Printf.printf "%g\n%!" nan
   done
