@@ -276,14 +276,14 @@ module A =
       else
         b.tau <- dt
 
-    let h_adaptive sf ({h = h; q2 = q2; q = q; f = f} as b) = 
-      let eg_err = (Base.distance q q2)*.(Base.norm f) and 
-          ke = Eg.kinetic_energy b in 
-      if eg_err = 0.0 then 
+    let h_adaptive sf ({h = h; q2 = q2; q = q; f = f; m = m} as b) = 
+      let dq = Base.distance q q2 in (* dq ~ h^5 *) 
+      if dq = 0.0 then 
         assign_timestep b (h*.2.01)
       else
-        let dt = h*.(sf*.(ke +. 100.0*.epsilon_float)/.eg_err)**0.25 in 
-        assign_timestep b dt
+        let f_dq = 0.5*.h*.h*.(Base.norm f)/.m in (* f_dq ~ h^2 *) 
+        let ratio = f_dq /. dq in 
+        assign_timestep b (h*.(sf*.ratio)**(1.0/.5.0))
 
     let advance_body b sf = 
       let {h = h; tau = tau; m = m; q = q; p = p; q1 = q1; q2 = q2; dVdq0 = dVdq0; dVdq1 = dVdq1; dVdq2 = dVdq2; f = f; df = df; ddf = ddf} = b in 

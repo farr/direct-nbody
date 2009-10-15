@@ -23,12 +23,6 @@ module type INTEGRATOR =
   sig
     type b 
     exception Eg_err of b array
-    val integrate : ?ci : float -> ?sf : float -> 
-      ?max_err : float -> ?step_err : float -> 
-	?filter : (b array -> b array) -> 
-          ?max_dt : (b array -> float) -> 
-            ?eg : float -> b array -> float 
-	    -> b array
     val constant_sf_integrate : ?ci : float -> ?sf : float -> 
       ?filter : (b array -> b array) -> 
         ?max_dt : (b array -> float) -> 
@@ -44,64 +38,12 @@ module Make(B : BODY)(A : (ADVANCER with type b = B.b)) : (INTEGRATOR with type 
 
     exception Eg_err of b array
 
-    let adjust_sf sf err target = 
-      let try_sf = sf *. (target/.err) in 
-      if try_sf > sf *. 2.0 then 
-	sf *. 2.0
-      else if try_sf < sf /. 5.0 then 
-	sf/.5.0
-      else
-	try_sf
-
-    let integrate ?ci ?(sf = 0.1) 
-	?(max_err = 1e-3) ?(step_err = 1e-6) 
-	?(filter = fun (bs : b array) -> bs)
-        ?(max_dt = fun (bs : b array) -> infinity)
-	?eg bs dt = 
-      let ci = match ci with 
-      | None -> dt
-      | Some(t) -> t in 
-      let eg = match eg with 
-      | None -> Eg.energy bs
-      | Some(e) -> e in 
-      let stop_time = (B.t bs.(0)) +. dt in 
-      let rec loop cbs last_eg sf = 
-	if B.t cbs.(0) >= stop_time then 
-	  cbs
-	else
-          let dt_max = max_dt bs in 
-	  let nbs = A.advance cbs (min ci dt_max) sf in 
-	  let neg = Eg.energy nbs in 
-	  let err = relative_error neg eg in 
-	  let serr = relative_error neg last_eg in 
-	  if serr > 5.0*.step_err then 
-	    begin
-	      let new_sf = adjust_sf sf serr step_err in 
-	      Printf.fprintf stderr 
-		"Retrying step at time %g due to step error %g (new sf: %g)\n"
-		(B.t cbs.(0)) serr new_sf;
-	      flush stderr;
-	      loop cbs last_eg new_sf
-	    end
-	  else if err > max_err then 
-	    raise (Eg_err cbs)
-	  else
-	    begin
-	      let new_sf = adjust_sf sf serr step_err in 
-	      Printf.fprintf stderr
-		"Successful step to %g with step error %g (new sf: %g)\n"
-		(B.t nbs.(0)) serr new_sf;
-	      flush stderr;
-	      loop (filter nbs) neg new_sf
-	    end in 
-      loop bs eg sf
-
     let constant_sf_integrate 
         ?(ci = 1.0) 
-        ?(sf = 1e-4) 
+        ?(sf = 2e-3) 
         ?(filter = fun (bs : b array) -> bs)
         ?(max_dt = fun (bs : b array) -> infinity)
-        ?(max_eg_err = 1e-5)
+        ?(max_eg_err = 1e-2)
         bs dt = 
       let e = Eg.energy bs and 
           stop_t = dt +. (B.t bs.(0)) in 

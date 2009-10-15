@@ -17,9 +17,9 @@ let n = ref 25
 let nrep = ref 100
 let dt = ref 0.1
 let tmax = ref 250.0
-let errmax = ref 1e-3
+let errmax = ref 1e-2
 let ktfac = ref 5.0
-let sf = ref 1e-9
+let sf = ref 2e-3
 
 let _ = 
   Arg.parse 
