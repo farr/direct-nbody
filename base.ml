@@ -77,9 +77,12 @@ let grad_v m1 q1 m2 q2 gv =
   let re = r2 +. !eps2 in 
   let r3 = re*.(sqrt re) in 
   let factor = m1*.m2/.r3 in 
-  gv.(0) <- factor*.((Array.unsafe_get q1 0) -. (Array.unsafe_get q2 0));
-  gv.(1) <- factor*.((Array.unsafe_get q1 1) -. (Array.unsafe_get q2 1));
-  gv.(2) <- factor*.((Array.unsafe_get q1 2) -. (Array.unsafe_get q2 2))
+  Array.unsafe_set gv 0
+    (factor*.((Array.unsafe_get q1 0) -. (Array.unsafe_get q2 0)));
+  Array.unsafe_set gv 1 
+    (factor*.((Array.unsafe_get q1 1) -. (Array.unsafe_get q2 1)));
+  Array.unsafe_set gv 2
+    (factor*.((Array.unsafe_get q1 2) -. (Array.unsafe_get q2 2)))
 (** [grad_v m1 q1 m2 q2 gv] stores the gradient of the two body
     potential with respect to [q1] in [gv].
 
