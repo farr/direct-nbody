@@ -39,24 +39,21 @@ module type ADWBODY =
 module A = 
   struct
     type body = {
-	id : int;
-	mutable t : float;
-	m : float;
-	q : float array;
-	p : float array;
-	mutable tau : float;
-	mutable h : float;
-	f : float array;
-	df : float array;
-	ddf : float array;
-	q1 : float array;
-	q2 : float array;
-	dVdq0 : float array;
-	dVdq1 : float array;
-	dVdq2 : float array;
-        tps : float array;
-        qps : float array array;
-        coeffs : float array array;
+        id : int;
+        mutable t : float;
+        m : float;
+        q : float array;
+        p : float array;
+        mutable h : float; (* Always matches q0, q1, q2. *)
+        mutable hmax : float; (* hmax < 0 implies initial step *)
+        mutable t0 : float; (* Always matches up with q0,q1,q2. *)
+        dVdq0 : float array;
+        dVdq1 : float array;
+        dVdq2 : float array;
+        q0 : float array;
+        q1 : float array;
+        q2 : float array;
+        cs : float array
       }
 
     type b = body
@@ -74,47 +71,40 @@ module A =
     let p b = b.p
     let next_t b = b.t +. b.h
 
-    let body_copy {id = id; t = t; m = m; q = q; p = p; tau = tau; f = f;
-		 df = df; ddf = ddf} = 
-      {id = id;
-       t = t;
-       m = m;
-       q = Array.copy q;
-       p = Array.copy p;
-       tau = tau;
-       h = tau;
-       f = Array.copy f;
-       df = Array.copy df;
-       ddf = Array.copy ddf;
-       q1 = Array.make 3 0.0;
-       q2 = Array.make 3 0.0;
-       dVdq0 = Array.make 3 0.0;
-       dVdq1 = Array.make 3 0.0;
-       dVdq2 = Array.make 3 0.0;
-       tps = Array.make 3 nan;
-       qps = Array.init 3 (fun _ -> Array.make 3 nan);
-       coeffs = Array.init 3 (fun _ -> Array.make 3 nan)
+    let body_copy b = 
+      {id = b.id;
+       t = b.t;
+       m = b.m;
+       q = Array.copy b.q;
+       p = Array.copy b.p;
+       t0 = b.t0;
+       h = b.h;
+       hmax = b.hmax;
+       q0 = Array.copy b.q0;
+       q1 = Array.copy b.q1;
+       q2 = Array.copy b.q2;
+       dVdq0 = Array.copy b.dVdq0;
+       dVdq1 = Array.copy b.dVdq1;
+       dVdq2 = Array.copy b.dVdq2;
+       cs = Array.copy b.cs
      }
 
     let make_body t m q p = 
       {id = gen_id ();
        t = t;
        m = m;
-       q = q;
-       p = p;
-       tau = -1.0;
-       h = -1.0;
-       f = Array.make 3 0.0;
-       df = Array.make 3 0.0;
-       ddf = Array.make 3 0.0;
-       q1 = Array.make 3 0.0;
-       q2 = Array.make 3 0.0;
-       dVdq0 = Array.make 3 0.0;
-       dVdq1 = Array.make 3 0.0;
-       dVdq2 = Array.make 3 0.0;
-       tps = Array.make 3 0.0;
-       qps = Array.init 3 (fun _ -> Array.make 3 nan);
-       coeffs = Array.init 3 (fun _ -> Array.make 3 nan)
+       q = Array.copy q;
+       p = Array.copy p;
+       t0 = nan;
+       h = nan;
+       hmax = nan;
+       q0 = Array.make 3 nan;
+       q1 = Array.make 3 nan;
+       q2 = Array.make 3 nan;
+       dVdq0 = Array.make 3 nan;
+       dVdq1 = Array.make 3 nan;
+       dVdq2 = Array.make 3 nan;
+       cs = Array.make 3 nan
      }
 
     let make = make_body
@@ -148,168 +138,128 @@ module A =
       done;
       !eg
 
-    let hermite_predict {m = m; q = q; p = p; f = f; df = df; ddf = ddf; q1 = q1; q2 = q2} dt = 
-      let dt2 = dt /. 2.0 in 
+    let predict_q012 ({m = m; q = q; p = p; 
+                       dVdq0 = dVdq0; dVdq1 = dVdq1; dVdq2 = dVdq2; 
+                       h = h; q0 = q0; q1 = q1; q2 = q2} as b)
+        hnew = 
+      let hnew2 = hnew*.hnew and 
+          h2 = h*.h in 
+      let hnew3 = hnew2*.hnew and 
+          h3 = h2*.h in 
       for i = 0 to 2 do 
-	(* Changed the 24.0 to 12.0 in q1 dt2^4 term.  This changes
-	the angular momentum conservation performance to 6th order in
-	N = 2 system for a single step *)
-	q1.(i) <- q.(i) +. p.(i)/.m*.dt2 +. 
-	    f.(i)/.(2.0*.m)*.(Base.square dt2) +. 
-	    df.(i)/.(6.0*.m)*.(Base.cube dt2) +. 
-	    ddf.(i)/.(12.0*.m)*.(dt2*.(Base.cube dt2));
-	q2.(i) <- q.(i) +. p.(i)/.m*.dt +. 
-	    f.(i)/.(2.0*.m)*.(Base.square dt) +. 
-	    df.(i)/.(6.0*.m)*.(Base.cube dt) +. 
-	    ddf.(i)/.(24.0*.m)*.(dt*.(Base.cube dt))
-      done
+        q0.(i) <- q.(i);
+        q1.(i) <- q0.(i) +. hnew*.p.(i)/.(2.0*.m) 
+            -. hnew3*.(h+.hnew)/.(8.0*.h3*.m)*.dVdq0.(i) 
+            +. hnew3*.(2.0*.h+.hnew)/.(16.0*.h3*.m)*.dVdq1.(i)
+            -. hnew2*.(6.0*.h2 +. 3.0*.h*.hnew +. hnew2)/.(8.0*.h3*.m)*.dVdq2.(i);
+        q2.(i) <- q0.(i) +. hnew*.p.(i)/.m
+            -. hnew3*.(h+.hnew)/.(h3*.m)*.dVdq0.(i)
+            +. hnew3*.(2.0*.h+.hnew)/.(2.0*.h3*.m)*.dVdq1.(i)
+            -. hnew2*.(3.0*.h2 +. 3.0*.h*.hnew +. hnew2)/.(h3*.m)*.dVdq2.(i)
+      done;
+      b.h <- hnew;
+      b.t0 <- b.t
 
-    let q0_coeff dt h h2r = 
-      ((h -. (2.0*.dt))*.(h -. dt))*.h2r
+    let clear_before_step b = 
+      Array.fill b.dVdq0 0 3 0.0;
+      Array.fill b.dVdq1 0 3 0.0;
+      Array.fill b.dVdq2 0 3 0.0;
+      Array.fill b.cs 0 3 0.0;
+      b.cs.(0) <- 1.0
 
-    let q1_coeff dt h h2r = 
-      (4.0 *. (h -. dt) *. dt)*.h2r
-
-    let q2_coeff dt h h2r = 
-      (((2.0*.dt) -. h)*.dt)*.h2r
-
-    let predict_position i {t = tb; h = h; q = q0; q1 = q1; q2 = q2; tps = tps; qps = qps; coeffs = coeffs} t q_pred = 
-      if tps.(i) = t then 
-        qps.(i)
+    let predict_position b t = 
+      if b.t = t then 
+        ()
       else begin
-        let dt = t -. tb in
-        let h2r = 1.0/.(h*.h) in 
-        let q0c = q0_coeff dt h h2r and 
-	    q1c = q1_coeff dt h h2r and 
-	    q2c = q2_coeff dt h h2r in 
+        let dt = t -. b.t0 and 
+            h = b.h in 
+        let h2 = h*.h in 
+        let cs = b.cs in 
+        cs.(0) <- ((2.0*.dt*.dt -. 3.0*.dt*.h +. h2)/.h2);
+        cs.(1) <- ((4.0*.dt*.(h -. dt))/.h2);
+        cs.(2) <- (dt*.(2.0*.dt-.h)/.h2);
+        let c0 = cs.(0) and 
+            c1 = cs.(1) and 
+            c2 = cs.(2) in 
+        let q = b.q and 
+            q0 = b.q0 and 
+            q1 = b.q1 and 
+            q2 = b.q2 in 
         for i = 0 to 2 do 
-	  q_pred.(i) <- q0c*.q0.(i) +. q1c*.q1.(i) +. q2c*.q2.(i)
+          q.(i) <- c0*.q0.(i) +. c1*.q1.(i) +. c2*.q2.(i)
         done;
-        tps.(i) <- t;
-        Array.blit q_pred 0 qps.(i) 0 3;
-        coeffs.(i).(0) <- q0c;
-        coeffs.(i).(1) <- q1c;
-        coeffs.(i).(2) <- q2c;
-        q_pred
+        b.t <- t
       end
 
-    let compute_dVs bs i = 
-      let b = bs.(i) and 
-	  gv = Array.make 3 0.0 and 
-	  q_pred = Array.make 3 0.0 in 
-      let {h = h; t = t; m = m; q = q0; q1 = q1; q2 = q2; dVdq0 = dVdq0; dVdq1 = dVdq1; dVdq2 = dVdq2} = b in 
-      let wt = h *. 0.16666666666666666666 in 
-      let wtm = 4.0*.wt and 
-	  ho2 = h *. 0.5 in
-      for j = i + 1 to Array.length bs - 1 do 
-	let {t = t2; h = h2; m = m2; dVdq0 = dVdq02; dVdq1 = dVdq12; dVdq2 = dVdq22; tps = tps; coeffs = coeffs} as b2 = bs.(j) in 
-	if h = h2 then
-	  begin
-	    Base.grad_v m q0 m2 b2.q gv;
-	    for i = 0 to 2 do 
-	      dVdq0.(i) <- dVdq0.(i) +. wt*.gv.(i);
-	      dVdq02.(i) <- dVdq02.(i) -. wt*.gv.(i);
-	    done;
-	    Base.grad_v m q1 m2 b2.q1 gv;
-	    for i = 0 to 2 do 
-	      dVdq1.(i) <- dVdq1.(i) +. wtm*.gv.(i);
-	      dVdq12.(i) <- dVdq12.(i) -. wtm*.gv.(i)
-	    done;
-	    Base.grad_v m q2 m2 b2.q2 gv;
-	    for i = 0 to 2 do 
-	      dVdq2.(i) <- dVdq2.(i) +. wt*.gv.(i);
-	      dVdq22.(i) <- dVdq22.(i) -. wt*.gv.(i)
-	    done
-	  end 
-	else
-	  begin
-            let qp = predict_position 0 b2 t q_pred in 
-            let c = coeffs.(0) in 
-	    let wt0 = wt *. c.(0) and 
-		wt1 = wt *. c.(1) and 
-		wt2 = wt *. c.(2) in 
-	    Base.grad_v m q0 m2 qp gv;
-	    for i = 0 to 2 do
-	      dVdq0.(i) <- dVdq0.(i) +. wt *. gv.(i);
-	      dVdq02.(i) <- dVdq02.(i) -. wt0 *. gv.(i);
-	      dVdq12.(i) <- dVdq12.(i) -. wt1 *. gv.(i);
-	      dVdq22.(i) <- dVdq22.(i) -. wt2 *. gv.(i);
-	    done;
-	    let t = t +. ho2 in
-            let qp = predict_position 1 b2 t q_pred in 
-            let c = coeffs.(1) in 
-	    let wt0 = wtm *. c.(0) and 
-		wt1 = wtm *. c.(1) and 
-		wt2 = wtm *. c.(2) in 
-	    Base.grad_v m q1 m2 qp gv;
-	    for i = 0 to 2 do
-	      dVdq1.(i) <- dVdq1.(i) +. wtm *. gv.(i);
-	      dVdq02.(i) <- dVdq02.(i) -. wt0 *. gv.(i);
-	      dVdq12.(i) <- dVdq12.(i) -. wt1 *. gv.(i);
-	      dVdq22.(i) <- dVdq22.(i) -. wt2 *. gv.(i);
-	    done;
-	    let t = t +. ho2 in 
-	    let qp = predict_position 2 b2 t q_pred in 
-            let c = coeffs.(2) in 
-	    let wt0 = wt *. c.(0) and 
-		wt1 = wt *. c.(1) and 
-		wt2 = wt *. c.(2) in 
-	    Base.grad_v m q2 m2 qp gv;
-	    for i = 0 to 2 do
-	      dVdq2.(i) <- dVdq2.(i) +. wt *. gv.(i);
-	      dVdq02.(i) <- dVdq02.(i) -. wt0 *. gv.(i);
-	      dVdq12.(i) <- dVdq12.(i) -. wt1 *. gv.(i);
-	      dVdq22.(i) <- dVdq22.(i) -. wt2 *. gv.(i);
-	    done
-	  end
+    let interact_bodies bs imin imax t vC = 
+      let n = Array.length bs in 
+      let gv = Array.make 3 0.0 in 
+      for i = imin to n - 1 do 
+        predict_position bs.(i) t
+      done;
+      for i = imin to imax - 1 do 
+        let b = bs.(i) in 
+        let q = b.q and m = b.m and cs = b.cs in 
+        let c0 = vC*.cs.(0) and c1 = vC*.cs.(1) and c2 = vC*.cs.(2) in 
+        let dVdq0 = b.dVdq0 and dVdq1 = b.dVdq1 and dVdq2 = b.dVdq2 in 
+        for j = i+1 to n-1 do 
+          let b2 = bs.(j) in 
+          let dVdq02 = b2.dVdq0 and dVdq12 = b2.dVdq1 and dVdq22 = b2.dVdq2 in
+          let cs2 = b2.cs in 
+          let c02 = vC*.cs2.(0) and 
+              c12 = vC*.cs2.(1) and 
+              c22 = vC*.cs2.(2) in 
+          Base.grad_v m q b2.m b2.q gv;
+          for i = 0 to 2 do 
+            let gvi = gv.(i) in 
+            dVdq0.(i) <- dVdq0.(i) +. c0*.gvi;
+            dVdq1.(i) <- dVdq1.(i) +. c1*.gvi;
+            dVdq2.(i) <- dVdq2.(i) +. c2*.gvi;
+            dVdq02.(i) <- dVdq02.(i) -. c02*.gvi;
+            dVdq12.(i) <- dVdq12.(i) -. c12*.gvi;
+            dVdq22.(i) <- dVdq22.(i) -. c22*.gvi
+          done
+        done
       done
-
-    let fill_whole_array (a : float array) obj = 
-      Array.fill a 0 (Array.length a) obj
-
-    let h_const h b = 
-      b.tau <- h
+            
+    let finish_body b t = 
+      let q = b.q and m = b.m in 
+      let p = b.p and q0 = b.q0 and h = b.h in 
+      let dVdq0 = b.dVdq0 and dVdq1 = b.dVdq1 and dVdq2 = b.dVdq2 in 
+      let cp = h /. m in 
+      let cV0 = cp and cV1 = 0.5*.cp in 
+      for i = 0 to 2 do 
+        let v0i = dVdq0.(i) and 
+            v1i = dVdq1.(i) and 
+            v2i = dVdq2.(i) and
+            pi = p.(i) in
+        q.(i) <- q0.(i) +. cp*.pi -. cV0*.v0i -. cV1*.v1i;
+        p.(i) <- pi -. v0i -. v1i -. v2i
+      done;
+      b.t <- t
 
     let assign_timestep b dt = 
-      if dt < 100.0*.epsilon_float*.b.t then 
+      if dt < 100.0*.epsilon_float*.b.t +. 100.0*.epsilon_float then 
         raise (Failure "too small timestep in advancer")
       else
-        b.tau <- dt
+        b.hmax <- dt
 
-    let h_adaptive sf ({h = h; q2 = q2; q = q; f = f; m = m} as b) = 
+    (* We try below to keep the predictor position error a fixed
+       fraction of the local acceleration distance.  This recipe comes
+       from Makino, Optimal Order and Time-Step Criterion for
+       Aarseth-type N-body Integrators, ApJ 369:200--212, 1991. *)
+    let h_adaptive sf ({h = h; q2 = q2; q = q; dVdq2 = dVdq2; m = m} as b) = 
       let dq = Base.distance q q2 in (* dq ~ h^5 *) 
       if dq = 0.0 then 
         assign_timestep b (h*.2.01)
-      else
-        let f_dq = 0.5*.h*.h*.(Base.norm f)/.m in (* f_dq ~ h^2 *) 
-        let ratio = f_dq /. dq in 
-        assign_timestep b (h*.(sf*.ratio)**(1.0/.5.0))
+      else begin
+        let a = (Base.norm dVdq2)*.6.0/.h/.m in  
+        let a_dq = 0.5*.h*.h*.a in (* Should scale as h^2 *)
+        let ratio = a_dq /. dq in (* should scale as h^-3 *)
+        assign_timestep b (h*.(sf*.ratio)**0.3333333) 
+      end
 
-    let advance_body b sf = 
-      let {h = h; tau = tau; m = m; q = q; p = p; q1 = q1; q2 = q2; dVdq0 = dVdq0; dVdq1 = dVdq1; dVdq2 = dVdq2; f = f; df = df; ddf = ddf} = b in 
-      for i = 0 to 2 do 
-	q.(i) <- q.(i) +. p.(i)/.m*.h -. 
-	    (h/.(2.0*.m))*.(2.0*.dVdq0.(i) +. dVdq1.(i));
-	p.(i) <- p.(i) -. (dVdq0.(i) +. dVdq1.(i) +. dVdq2.(i))
-      done;
-      b.t <- b.t +. h;
-      for i = 0 to 2 do 
-	f.(i) <- (-6.0)*.dVdq2.(i)/.h;
-	df.(i) <- (-6.0)*.(dVdq0.(i) -. dVdq1.(i) +. 3.0*.dVdq2.(i))/.
-	  (Base.square h);
-	ddf.(i) <- (-12.0)/.(Base.cube h)*.
-	    (2.0*.dVdq0.(i) -. dVdq1.(i) +. 2.0*.dVdq2.(i))
-      done;
-      h_adaptive sf b;
-      fill_whole_array dVdq0 0.0;
-      fill_whole_array dVdq1 0.0;
-      fill_whole_array dVdq2 0.0;
-      incr Base.nsteps
-
-    let can_advance b dt = 
-      dt < b.tau
-
-    let tau_lt {tau = h1} {tau = h2} = 
+    let hmax_lt {hmax = h1} {hmax = h2} = 
       if h1 < h2 then 
 	-1
       else if h1 > h2 then
@@ -324,56 +274,111 @@ module A =
 	a.(i) <- temp.(i - low)
       done
 
-    let rec advance_bodies bs i dt sf = 
-      let b = bs.(i) in 
-      if can_advance b dt then begin
-        b.h <- dt;
-        hermite_predict b dt;
-        compute_dVs bs i;
-        if i > 0 then 
-          advance_bodies bs (i - 1) dt sf;
-        advance_body b sf
+    let rec advance_range bs imax dt sf = 
+      if bs.(imax-1).hmax < dt then begin
+        advance_range bs imax (dt/.2.0) sf;
+        advance_range bs imax (dt/.2.0) sf
       end else begin
-        advance_bodies bs i (dt /. 2.0) sf;
-        sort_range bs tau_lt 0 (i+1);
-        advance_bodies bs i (dt /. 2.0) sf
+        let imin = let rec loop i = 
+          if i < 0 then 
+            0
+          else if dt < bs.(i).hmax then 
+            loop (i-1)
+          else
+            i+1 in 
+        loop (imax - 1) in 
+        for i = imin to imax - 1 do 
+          predict_q012 bs.(i) dt;
+          clear_before_step bs.(i)
+        done;
+        let t0 = bs.(imin).t in 
+        interact_bodies bs imin imax t0 (dt/.6.0);
+        if imin > 0 then advance_range bs imin (dt/.2.0) sf;
+        interact_bodies bs imin imax (t0 +. 0.5*.dt) (2.0*.dt/.3.0);
+        if imin > 0 then advance_range bs imin (dt/.2.0) sf;
+        interact_bodies bs imin imax (t0 +. dt) (dt/.6.0);
+        for i = imin to imax - 1 do 
+          finish_body bs.(i) (t0+.dt);
+          h_adaptive sf bs.(i)
+        done;  
+        sort_range bs hmax_lt 0 imax
       end
-	  
-    let set_up_bs bs sf = 
-      let gv = Array.make 3 0.0 and 
-	  dgv = Array.make 3 0.0 in 
-      if bs.(0).tau < 0.0 then 
-	Array.iteri 
-	  (fun i b -> 
-	    let q = b.q and m = b.m and p = b.p and 
-		f = b.f and df = b.df in 
-	    Array.iteri 
-	      (fun j b2 -> 
-		let q2 = b2.q and m2 = b2.m and p2 = b2.p in 
-		if i = j then 
-		  ()
-		else
-		  begin
-		    Base.grad_v_dgrad_v m q p m2 q2 p2 gv dgv;
-		    for i = 0 to 2 do
-		      f.(i) <- f.(i) -. gv.(i);
-		      df.(i) <- df.(i) -. dgv.(i)
-		    done
-		  end)
-	      bs;
-	    b.tau <- 6.0*.sf*.(Base.norm f)/.(Base.norm df))
-	  bs;
-      Array.iter (fun b -> hermite_predict b b.tau) bs;
-      Array.sort tau_lt bs
 
-    let sorted_advance bs dt sf = 
-      set_up_bs bs sf;
-      advance_bodies bs (Array.length bs - 1) dt sf;
-      bs
+    (* The idea here is to create a fictional previous step (with
+       length h = 1.0) so that the predictor has something to work off
+       of for the true first step.  We also try to derive a timescale
+       from a comparison between the force and the force derivative at
+       the starting time: dt = safety_factor*F/Fdot. *)
+    let initialize_before_first_step bs sf = 
+      let n = Array.length bs and 
+          gv = Array.make 3 0.0 and 
+          dgv = Array.make 3 0.0 and 
+          fdot = Array.make 3 0.0 and 
+          h = 1.0 in 
+      let c0 = h /. 6.0 and c1 = 2.0*.h/.3.0 in 
+      let c2 = c0 in 
+      for i = 0 to n - 1 do 
+        clear_before_step bs.(i);
+        bs.(i).h <- h;
+      done;
+      for i = 0 to n - 1 do 
+        let {m = m; 
+             q = q; 
+             p = p;
+             dVdq0 = dVdq0; 
+             dVdq1 = dVdq1;
+             dVdq2 = dVdq2} = bs.(i) in 
+        for j = i+1 to n - 1 do 
+          let {m = mj;
+               q = qj;
+               p = pj;
+               dVdq0 = dVdq0j;
+               dVdq1 = dVdq1j;
+               dVdq2 = dVdq2j} = bs.(j) in 
+          Base.grad_v_dgrad_v m q p mj qj pj gv dgv;
+          for k = 0 to 2 do 
+            dVdq0.(k) <- dVdq0.(k) +. c0*.(gv.(k) -. h*.dgv.(k));
+            dVdq1.(k) <- dVdq1.(k) +. c1*.(gv.(k) -. 0.5*.h*.dgv.(k));
+            dVdq2.(k) <- dVdq2.(k) +. c2*.gv.(k);
+            dVdq0j.(k) <- dVdq0j.(k) -. c0*.(gv.(k) -. h*.dgv.(k));
+            dVdq1j.(k) <- dVdq1j.(k) -. c1*.(gv.(k) -. 0.5*.h*.dgv.(k));
+            dVdq2j.(k) <- dVdq2j.(k) -. c2*.gv.(k)
+          done
+        done
+      done;
+      for i = 0 to n - 1 do 
+        let {dVdq0 = dVdq0;
+             dVdq1 = dVdq1;
+             dVdq2 = dVdq2;
+             h = h} as b = bs.(i) in 
+        for j = 0 to 2 do 
+          (* Not exactly fdot, but proportional to it *)
+          fdot.(j) <- dVdq0.(j) -. dVdq1.(j) +. 3.0*.dVdq2.(j)
+        done;
+        assign_timestep b
+          (1e-2*.sf**0.33333*.h*.
+            (Base.norm dVdq2)/.(Base.norm fdot)) (* Timescale ~ f/fdot. *)
+      done
+
+    let vec_any pred v = 
+      let n = Array.length v in 
+      let rec loop i = 
+        if i >= n then 
+          false
+        else
+          (pred v.(i)) || loop (i+1) in 
+      loop 0
+
+    let first_step b = 
+      match classify_float b.h with 
+      | FP_normal -> false
+      | _ -> true
 
     let advance bs dt sf = 
       let bs = Array.map body_copy bs in 
-      let new_bs = sorted_advance bs dt sf in 
-      Array.fast_sort (fun {id = id1} {id = id2} -> compare id1 id2) new_bs;
-      new_bs
+      if vec_any first_step bs then 
+        initialize_before_first_step bs sf;
+      Array.fast_sort hmax_lt bs;
+      advance_range bs (Array.length bs) dt sf;
+      bs
   end

@@ -7,17 +7,22 @@ module E = A.E
 module Ad = Advancer.A
 
 let test_energy_error () = 
-  let bs = Ic.make_plummer 250 in 
-  let new_bs = Ad.advance bs 1.0 1e-8 in 
-  let new_bs2 = Ad.advance bs 1.0 1e-7 in 
+  let n = 10 in 
+  let bs = Ic.rescale_to_standard_units (Ic.make_plummer n) in 
+  Base.set_eps (4.0/.(float_of_int n));
+  let new_bs = Ad.advance bs 1.0 1e-4 in 
+  let new_bs2 = Ad.advance bs 1.0 1e-3 in 
   let e0 = E.energy bs and 
       e1 = E.energy new_bs and 
       e2 = E.energy new_bs2 in 
   let de1 = abs_float (e1 -. e0) and 
       de2 = abs_float (e2 -. e0) in 
   let r = de2 /. de1 in 
-  assert_bool "ratio too small" (r > (sqrt 10.0));
-  assert_bool "ratio too big" (r < (sqrt 1000.0));
+  let r_exact = 10.0**(4.0/.3.0) in
+  let ratio = r /. r_exact in 
+(* Ensure within 1/2 logarithmic order of magnitude *)
+  assert_bool "ratio too small" (ratio > (sqrt 0.1)); 
+  assert_bool "ratio too big" (ratio < (sqrt 10.0));
   assert_equal ~msg:"energy error too big" 
     ~cmp:(cmp_float ~epsabs:0.0 ~epsrel:1e-6)
     ~printer:string_of_float

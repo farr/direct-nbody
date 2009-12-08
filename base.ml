@@ -34,9 +34,9 @@ let set_eps eps =
 (** Allows to set the square of the softening parameter. *)
 
 let norm_squared v = 
-  let x = Array.unsafe_get v 0 and 
-      y = Array.unsafe_get v 1 and 
-      z = Array.unsafe_get v 2 in 
+  let x = v.(0) and
+      y = v.(1) and 
+      z = v.(2) in
   x*.x +. y*.y +. z*.z
 (** Square of the Euclidean norm in 3-D. *)
 
@@ -44,9 +44,9 @@ let norm v = sqrt (norm_squared v);;
 (** Euclidean norm in 3-D. *)
 
 let distance_squared x y = 
-  let dx = (Array.unsafe_get x 0) -. (Array.unsafe_get y 0) and 
-      dy = (Array.unsafe_get x 1) -. (Array.unsafe_get y 1) and 
-      dz = (Array.unsafe_get x 2) -. (Array.unsafe_get y 2) in 
+  let dx = x.(0) -. y.(0) and 
+      dy = x.(1) -. y.(1) and
+      dz = x.(2) -. y.(2) in 
   dx*.dx +. dy*.dy +. dz*.dz
 (** Euclidean distance squared in 3-D. *)
 
@@ -54,9 +54,7 @@ let distance x y = sqrt (distance_squared x y);;
 (** Euclidean distance in 3-D. *)
 
 let dot x y = 
-  (Array.unsafe_get x 0)*.(Array.unsafe_get y 0)
-    +. (Array.unsafe_get x 1)*.(Array.unsafe_get y 1) 
-    +. (Array.unsafe_get x 2)*.(Array.unsafe_get y 2)
+  x.(0)*.y.(0) +. x.(1)*.y.(1) +. x.(2)*.y.(2)
 (** Dot product in 3-D. *)
 
 let v m1 q1 m2 q2 = 
@@ -77,12 +75,9 @@ let grad_v m1 q1 m2 q2 gv =
   let re = r2 +. !eps2 in 
   let r3 = re*.(sqrt re) in 
   let factor = m1*.m2/.r3 in 
-  Array.unsafe_set gv 0
-    (factor*.((Array.unsafe_get q1 0) -. (Array.unsafe_get q2 0)));
-  Array.unsafe_set gv 1 
-    (factor*.((Array.unsafe_get q1 1) -. (Array.unsafe_get q2 1)));
-  Array.unsafe_set gv 2
-    (factor*.((Array.unsafe_get q1 2) -. (Array.unsafe_get q2 2)))
+  gv.(0) <- factor*.(q1.(0) -. q2.(0));
+  gv.(1) <- factor*.(q1.(1) -. q2.(1));
+  gv.(2) <- factor*.(q1.(2) -. q2.(2))
 (** [grad_v m1 q1 m2 q2 gv] stores the gradient of the two body
     potential with respect to [q1] in [gv].
 
