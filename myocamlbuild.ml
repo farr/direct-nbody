@@ -1,6 +1,6 @@
 open Ocamlbuild_plugin
 
-let oUnit_dir = "/Users/farr/Documents/code/ounit-1.0.3"
+let oUnit_dir = "/Users/farr/Documents/code/oUnit"
 
 let _ = dispatch begin function 
   | After_rules -> 
