@@ -21,6 +21,8 @@ let errmax = ref 1e-2
 let ktfac = ref 5.0
 let sf = ref 2e-3
 
+let _ = Random.self_init ()
+
 let _ = 
   Arg.parse 
     [("-n", Arg.Set_int n, "number of bodies to evolve");
@@ -29,14 +31,13 @@ let _ =
      ("-tmax", Arg.Set_float tmax, "maximum evolution time");
      ("-errmax", Arg.Set_float errmax, "maximum relative energy error");
      ("-ktfac", Arg.Set_float ktfac, "number of kT for 'hard' binary");
-     ("-sf", Arg.Set_float sf, "timestep safety factor")]
+     ("-sf", Arg.Set_float sf, "timestep safety factor");
+     ("-seed", Arg.Int (fun s -> Random.init s), "RNG seed (default self_init)")]
     (fun _ -> ())
     "bft [OPTIONS ...]"
 
 (* Arguments are (time, temp). *)
 exception Hard_binary of float * float
-
-let _ = Random.self_init ()
 
 let _ = 
   Base.set_eps 0.0;
