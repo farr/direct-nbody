@@ -238,10 +238,18 @@ module A =
       done;
       b.t <- t
 
+    let nsmall_tsteps = ref 0
+    let print_small_timesteps = ref 1
+
     let assign_timestep b dt = 
-      if dt < 100.0*.epsilon_float*.b.t +. 100.0*.epsilon_float then 
-        raise (Failure "too small timestep in advancer")
-      else
+      if dt < 100.0*.epsilon_float*.(abs_float b.t) +. 100.0*.epsilon_float then begin
+        incr nsmall_tsteps;
+        if !nsmall_tsteps = !print_small_timesteps then begin
+          Printf.eprintf "Warning: small timestep in assign_timestep (number %d): %g\n" !nsmall_tsteps dt;
+          print_small_timesteps := !print_small_timesteps*2
+        end;
+        b.hmax <- 100.0*.epsilon_float*.b.t +. 100.0*.epsilon_float
+      end else
         b.hmax <- dt
 
     (* We try below to keep the predictor position error a fixed

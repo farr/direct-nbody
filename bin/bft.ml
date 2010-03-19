@@ -25,13 +25,20 @@ let _ = Random.self_init ()
 
 let _ = 
   Arg.parse 
-    [("-n", Arg.Set_int n, "number of bodies to evolve");
-     ("-nrep", Arg.Set_int nrep, "number of separate evolutions");
-     ("-dt", Arg.Set_float dt, "time interval to check for hard binaries");
-     ("-tmax", Arg.Set_float tmax, "maximum evolution time");
-     ("-errmax", Arg.Set_float errmax, "maximum relative energy error");
-     ("-ktfac", Arg.Set_float ktfac, "number of kT for 'hard' binary");
-     ("-sf", Arg.Set_float sf, "timestep safety factor");
+    [("-n", Arg.Set_int n, 
+      (Printf.sprintf "number of bodies to evolve (default %d)" !n));
+     ("-nrep", Arg.Set_int nrep, 
+      (Printf.sprintf "number of separate evolutions (default %d)" !nrep));
+     ("-dt", Arg.Set_float dt, 
+      (Printf.sprintf "time interval to check for hard binaries (default %g)" !dt));
+     ("-tmax", Arg.Set_float tmax, 
+      (Printf.sprintf "maximum evolution time (default %g)" !tmax));
+     ("-errmax", Arg.Set_float errmax, 
+      (Printf.sprintf "maximum relative energy error (default %g)" !errmax));
+     ("-ktfac", Arg.Set_float ktfac, 
+      (Printf.sprintf "number of kT for 'hard' binary (default %g)" !ktfac));
+     ("-sf", Arg.Set_float sf, 
+      (Printf.sprintf "timestep safety factor (default %g)" !sf));
      ("-seed", Arg.Int (fun s -> Random.init s), "RNG seed (default self_init)")]
     (fun _ -> ())
     "bft [OPTIONS ...]"
