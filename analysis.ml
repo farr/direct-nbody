@@ -22,6 +22,49 @@ module Make (B : Body.BODY) = struct
 
   let pi = 4.0*.atan 1.0
 
+  let all_equal compare xs start endd = 
+    let x0 = xs.(start) in 
+    let rec ae_loop i = 
+      if i >= endd then 
+        true
+      else if compare x0 xs.(i) = 0 then 
+        ae_loop (i+1)
+      else
+        false in 
+      ae_loop (start+1)
+        
+  let find_nthf ?(copy = true) compare nth xs = 
+    if nth < 0 || nth >= Array.length xs then raise (Invalid_argument "find_nthf: nth outside array bounds");
+    let xs = if copy then Array.copy xs else xs in 
+    let rec find_nth_loop start nth endd = 
+      if endd - start = 1 then 
+        if nth <> 0 then 
+          raise (Failure "find_nthf: nth index not in array bounds")
+        else
+          xs.(start)
+      else if all_equal compare xs start endd then 
+        xs.(start)
+      else begin
+        let part = xs.(start + (Random.int (endd - start))) in 
+        let rec swap_loop low high = 
+          let new_low = let rec new_low_loop l = 
+                          if l >= endd then l else if compare xs.(l) part <= 0 then new_low_loop (l+1) else l in new_low_loop low and
+              new_high = let rec new_high_loop h = 
+                           if h < start then h else if compare xs.(h) part > 0 then new_high_loop (h-1) else h in new_high_loop high in
+            if new_low > new_high then new_low else if new_low >= endd then endd else if new_high < start then new_low else begin
+              let tmp = xs.(new_low) in 
+                xs.(new_low) <- xs.(new_high);
+                xs.(new_high) <- tmp;
+                swap_loop new_low new_high
+            end in
+        let ilow = swap_loop start (endd - 1) in
+          if nth < (ilow - start) then 
+            find_nth_loop start nth ilow
+          else
+            find_nth_loop ilow (nth - (ilow - start)) endd
+      end in 
+      find_nth_loop 0 nth (Array.length xs)
+
   let sorted_array_insert comp arr obj = 
     let n = Array.length arr in 
     if comp obj arr.(n-1) < 0 then 
@@ -154,15 +197,10 @@ module Make (B : Body.BODY) = struct
       (Array.make 3 0.0)
       bs
 
-  let angular_momentum bs = 
-    let cross x y = 
-      [| x.(1)*.y.(2) -. x.(2)*.y.(1);
-         x.(2)*.y.(0) -. x.(0)*.y.(2);
-         x.(0)*.y.(1) -. x.(1)*.y.(0) |] in 
+  let total_angular_momentum bs = 
     Array.fold_left 
       (fun l b ->
-        let q = B.q b and p = B.p b in 
-        let lb = cross q p in 
+        let lb = E.angular_momentum b in
         for i = 0 to 2 do 
           l.(i) <- l.(i) +. lb.(i)
         done;
@@ -472,4 +510,43 @@ module Make (B : Body.BODY) = struct
     let n = float_of_int (Array.length bs) and 
         e = E.total_kinetic_energy bs in 
     2.0*.e/.(3.0*.n)
+
+  let bodies_to_el_phase_space bs = 
+    Array.mapi 
+      (fun i b -> 
+        let lb = Base.norm (E.angular_momentum b) and 
+            ke = E.kinetic_energy b and 
+            pe = ref 0.0 in 
+          for j = 0 to i - 1 do 
+            pe := !pe +. E.potential_energy b bs.(j)
+          done;
+          for j = i + 1 to Array.length bs - 1 do 
+            pe := !pe +. E.potential_energy b bs.(j)
+          done;
+          let etot = ke +. !pe in 
+            [|etot; lb|])
+      bs
+
+  let lagrange_radius ?origin bs frac = 
+    assert(0.0 <= frac && frac < 1.0);
+    let origin = match origin with 
+      | Some(o) -> o
+      | None -> center_of_mass bs in 
+    let compare b1 b2 = 
+      let q1 = B.q b1 and 
+          q2 = B.q b2 in 
+      let d1 = Base.distance_squared q1 origin and 
+          d2 = Base.distance_squared q2 origin in 
+        Pervasives.compare d1 d2 in 
+      Array.fast_sort compare bs;
+      let mtot = total_mass bs in 
+      let rec lagrange_radius_loop i m = 
+        if i >= Array.length bs then raise (Failure "lagrange_radius") else
+          let m = m +. B.m bs.(i) in 
+            if m /. mtot >= frac then begin
+              Base.distance (B.q bs.(i)) origin
+            end else
+              lagrange_radius_loop (i+1) m in
+        lagrange_radius_loop 0 0.0
+
 end

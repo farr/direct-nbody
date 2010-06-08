@@ -162,7 +162,13 @@ struct
       bs
 
     let rescale_to_standard_units bs = 
-      let mtot = total_mass bs 
+      let mtot = A.total_mass bs in 
+      let bs = 
+        Array.map 
+          (fun b -> 
+            let t = B.t b and q = B.q b and p = B.p b and m = B.m b in 
+              B.make t (m/.mtot) q p)
+          bs in
       let ke = E.total_kinetic_energy bs and 
           pe = E.total_potential_energy bs in 
       let p_factor = sqrt (0.25 /. ke) and 

@@ -26,6 +26,7 @@ module type ENERGY =
     val total_kinetic_energy : b array -> float
     val total_potential_energy : b array -> float
     val energy : b array -> float
+    val angular_momentum : b -> float array
   end
 
 module Make(B : BODY) : (ENERGY with type b = B.b) = 
@@ -54,4 +55,11 @@ module Make(B : BODY) : (ENERGY with type b = B.b) =
       let ke = total_kinetic_energy bs in 
       let pe = total_potential_energy bs in 
       ke +. pe
+
+  let angular_momentum b = 
+    let q = B.q b and 
+        p = B.p b in 
+      [| p.(1)*.q.(2) -. p.(2)*.q.(1);
+         p.(2)*.q.(0) -. p.(0)*.q.(2);
+         p.(0)*.q.(1) -. p.(1)*.q.(0) |]
   end
