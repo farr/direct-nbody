@@ -45,6 +45,15 @@ module type IC =
         in "standard" units: Mtot = 1, E = -1/4, virial ratio =
         0.5. *)
     val rescale_to_standard_units : b array -> b array
+
+    (** Adjust the coordinate frame of the system to the
+        center-of-mass frame. *)
+    val adjust_frame : b array -> b array
+
+  (** [add_mass_spectrum gen_mass bs] Construct a new system with
+      masses chosen according to the [gen_mass] function.  *)
+    val add_mass_spectrum : (unit -> float) -> b array -> b array
+
   end
 
 module Make(B : BODY) : (IC with type b = B.b)  = 
@@ -60,13 +69,16 @@ struct
     let p_tot = A.total_momentum bs and 
 	com = A.center_of_mass bs and 
 	m_tot = A.total_mass bs in 
-      Array.iter 
+      Array.map
 	(fun b -> 
-	   let m = B.m b and q = B.q b and p = B.p b in 
-	     for i = 0 to 2 do 
-	       q.(i) <- q.(i) -. com.(i);
-	       p.(i) <- p.(i) -. p_tot.(i)*.m/.m_tot
-	     done)
+	  let m = B.m b and q = B.q b and p = B.p b in 
+          let qnew = Array.make 3 0.0 and 
+              pnew = Array.make 3 0.0 in
+	    for i = 0 to 2 do 
+	      qnew.(i) <- q.(i) -. com.(i);
+	      pnew.(i) <- p.(i) -. p_tot.(i)*.m/.m_tot
+	    done;
+            B.make (B.t b) m qnew pnew)
 	bs
 
   let random_between a b = 
@@ -96,13 +108,12 @@ struct
     let bs = 
       Array.init n
 	(fun i -> 
-	   make_body 0.0 m
-	     (random_vector 
-		(random_from_dist ~xmax: (12.0/.5.0) 
-		   ~ymax: (144.0/.25.0) square))
-	     (Array.make 3 0.0)) in 
-      adjust_frame bs;
-      bs
+	  make_body 0.0 m
+	    (random_vector 
+	       (random_from_dist ~xmax: (12.0/.5.0) 
+		  ~ymax: (144.0/.25.0) square))
+	    (Array.make 3 0.0)) in 
+      adjust_frame bs
 	
   let make_plummer n = 
     let m = 1.0 /. (float_of_int n) and 
@@ -111,17 +122,16 @@ struct
     let bs = 
       Array.init n 
 	(fun i -> 
-	   let r = 1.0 /. 
-	     (sqrt ((random_between 0.0 1.0)**(-2.0/.3.0) -. 1.0)) and 
-	       x = random_from_dist ~ymax:0.1 
-	     (fun x -> (square x)*.(1.0 -. (square x))**3.5) in 
-	   let q = random_vector (r /. sf) and 
-	       p = random_vector 
-	     ((sqrt sf) *. m *. x *. (sqrt 2.0) *. 
+	  let r = 1.0 /. 
+	    (sqrt ((random_between 0.0 1.0)**(-2.0/.3.0) -. 1.0)) and 
+	      x = random_from_dist ~ymax:0.1 
+	    (fun x -> (square x)*.(1.0 -. (square x))**3.5) in 
+	  let q = random_vector (r /. sf) and 
+	      p = random_vector 
+	    ((sqrt sf) *. m *. x *. (sqrt 2.0) *. 
 		(1.0 +. (square r))**(-0.25)) in 
-	     make_body 0.0 m q p) in 
-      adjust_frame bs;
-      bs
+	    make_body 0.0 m q p) in 
+      adjust_frame bs
 
   let make_hot_spherical n =
     let v0 = sqrt (21.0/.10.0) and
@@ -129,23 +139,22 @@ struct
     let bs = 
       Array.init n
 	(fun i -> 
-	   let r = random_from_dist square and
-	       v = random_between 0.0 v0 in 
-	     make_body 0.0 m (random_vector r) (random_vector (m *. v))) in 
-      adjust_frame bs;
-      bs      
+	  let r = random_from_dist square and
+	      v = random_between 0.0 v0 in 
+	    make_body 0.0 m (random_vector r) (random_vector (m *. v))) in 
+      adjust_frame bs
 
   let from_nbody2_file name n = 
     let in_buffer = Scanf.Scanning.from_file name in 
       Array.init n (fun i -> 
-	              let m = Scanf.bscanf in_buffer " %g " (fun x -> x) in 
-	              let q = Array.init 3 (fun i -> 
-	                                      Scanf.bscanf in_buffer " %g " (fun x -> x)) in 
-	              let p = Array.init 3 (fun i -> 
-	                                      Scanf.bscanf in_buffer " %g " (fun v -> m*.v)) in 
-	                make_body 0.0 m q p)
+	let m = Scanf.bscanf in_buffer " %g " (fun x -> x) in 
+	let q = Array.init 3 (fun i -> 
+	  Scanf.bscanf in_buffer " %g " (fun x -> x)) in 
+	let p = Array.init 3 (fun i -> 
+	  Scanf.bscanf in_buffer " %g " (fun v -> m*.v)) in 
+	  make_body 0.0 m q p)
 
-  (* [q] is desired KE/PE ratio (i.e. q = 0.5 for virial equilibrium). *)
+    (* [q] is desired KE/PE ratio (i.e. q = 0.5 for virial equilibrium). *)
     let make_spherical_out_of_equilibrium n q =
       assert (q >= 0.0 && q < 1.0);
       let bs = make_hot_spherical n and 
@@ -180,5 +189,22 @@ struct
               q = B.q b and 
               p = B.p b in 
           B.make t m (Array.map (( *. ) r_factor) q) (Array.map (( *. ) p_factor) p))
-        bs             
+        bs
+
+    let rescale_mass b mnew = 
+      let m = B.m b and 
+          p = B.p b in 
+      let pnew = Array.make 3 0.0 in 
+        for i = 0 to 2 do 
+          pnew.(i) <- p.(i) *. mnew/.m
+        done;
+        B.make (B.t b) mnew (B.q b) pnew
+
+    let add_mass_spectrum gen_mass bs = 
+      Array.map (fun b -> rescale_mass b (gen_mass ())) bs
+
+    let gen_salpeter mmin mmax = 
+      let ind = -2.3 in
+      let ind1 = ind +. 1.0 in 
+        ((mmax**ind1 -. mmin**ind1)*.(Random.float 1.0) +. mmin**ind1)**(1.0 /. ind1)
   end
