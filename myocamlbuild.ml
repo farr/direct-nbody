@@ -6,8 +6,9 @@ let _ = dispatch begin function
   | After_rules -> 
       ocaml_lib ~extern:true ~dir:oUnit_dir "oUnit";
       flag ["native"; "compile"]
-        (S[A"-inline"; A"1000"; A"-unsafe"]);
+        (S[A"-inline"; A"1000"]);
       flag ["native"; "link"]
-        (S[A"-inline"; A"1000"])
+        (S[A"-inline"; A"1000"]);
+      ocaml_lib ~extern:false "nbody"
   | _ -> ()
 end
