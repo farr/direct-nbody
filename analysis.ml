@@ -17,8 +17,134 @@
 
 open Base
 
-module Make (B : Body.BODY) = struct
+(** Output type of {!Analysis.Make}. *)
+module type ANALYSIS = sig
+  (** Bodies. *)
+  type b
+
+  (** Embedded energy calculating module. *)
+  module E : Energy.ENERGY with type b = b
+
+  (** [nearest_neighbors n bs b] returns the [n] nearest neighbors to
+      [b] out of the bodies [bs]. *)
+  val nearest_neighbors : int -> b array -> b -> b array
+
+  (** [density_estimator n bs b] returns the
+      [n]th-nearest-neighbor-based density estimator for the local
+      density at the position of [b].  See S. Casertano, P. Hut.  Core
+      radius and density measurements in N-body experiments:
+      connections with theoretical and observational definitions.
+      Astrophysical Journal, vol. 298, p. 80, 1985. *)
+  val density_estimator : int -> b array -> b -> float
+
+  (** [density_center rhos bs] returns the location of the
+      density-weighted center of the system [bs].  [rhos] is an array
+      of containing the density estimate at the location of each [b].
+      See Casertano and Hut
+      ({!Analysis.ANALYSIS.density_estimator}).*)
+  val density_center : float array -> b array -> float array
+
+  (** [density_radius n bs] returns the density-weighted radius
+      estimate for the core radius (using [n] nearest neighbors to
+      estimate the density).  See Casertano and Hut
+      ({!Analysis.ANALYSIS.density_estimator}).*)
+  val density_radius : int -> b array -> float
+
+  (** [density_density n bs] returns the density-weighted core density
+      estimate (using [n] nearest neighbors to estimate the density).
+      See Casertano and Hut ({!Analysis.ANALYSIS.density_estimator}).*)
+  val density_density : int -> b array -> float
+
+  (** [core_crossing_time n bs] uses the [n]th nearest neighbor
+      density estimator to compute a core density for the system [bs],
+      and then returns the core crossing time. *)
+  val core_crossing_time : int -> b array -> float
+
+  (** Returns the total momentum of the given system. *)
+  val total_momentum : b array -> float array
+
+  (** Returns the total mass of the given system. *)
+  val total_mass : b array -> float
+
+  (** Returns the center of mass of the given system. *)
+  val center_of_mass : b array -> float array
+
+  (** Returns the total angular momentum of the system about the
+      origin. *)
+  val total_angular_momentum : b array -> float array
+
+  (** Given a filename that stores a sequence of marshalled [b
+      array]s, load the given states and return them in order. *)
+  val load_states : string -> b array array 
+
+  (** [load_state n filename] loads the [n]th state from the given
+      file, which should contain the concatenation of marshalled [b array]s. *)
+  val load_state : int -> string -> b array
+
+  (** Returns the system time. *)
+  val time : b array -> float
+
+  (** [boxcar_average n ys] returns an array of length equal to [ys]
+      where each value is an average of the [n] nearest values in [ys]
+      (this smoothing operation is called a width-[n] boxcar
+      average). *)
+  val boxcar_average : int -> float array -> float array
+
+  val zip : 'a array -> 'b array -> ('a * 'b) array
+
+  val unzip : ('a * 'b) array -> ('a array) * ('b array)
+
+  (** [with_random_state state thunk] applies [thunk] with the random
+      state set to [state] for the extent of the application,
+      returning the random state to its initial value when [thunk]
+      finishes or raises an exception.  The result is the return value
+      of [thunk].*)
+  val with_random_state : Random.State.t -> (unit -> 'a) -> 'a
+
+  (** [perturbed_bodies scale bs] generates a new system where each
+      position and momentum have been adjusted by adding a random
+      increment with typical size [scale].*)
+  val perturbed_bodies : float -> b array -> b array
+    
+  (** [polynomial_interpolation xs ys] returns a function that
+      computes the value of the interpolating polynomial that passes
+      through each pair of [(x,y)].*)
+  val polynomial_interpolation : float array -> float array -> (float -> float)
+
+  (** Computes the binding energy of the binary composed of the given
+      bodies (which can be positive, if the bodies are unbound relative to
+      each other). *)
+  val binary_energy : b -> b -> float
+
+  (** Returns a list of all binaries in the given system and their
+      binding energy. *)
+  val binaries : b array -> ((b * b) * float) list
+
+  (** Returns the most tightly bound binary in the system. *)
+  val tightest_binary : b array -> b * b 
+
+  (** Returns T such that ke = 3/2 N T. *)
+  val body_temperature : b array -> float
+
+  (** [bodies_to_el_phase_space ?specific bs] returns an array
+      containing the energy and angular momentum of the corresponding
+      member of [bs].  When [specific] is [true], the specific energy
+      and angular momentum are returned instead. *)
+  val bodies_to_el_phase_space : ?specific : bool -> b array -> float array array
+
+  (** [lagrange_radius ?origin bs frac] returns the radius inside
+      which a fraction of at least [frac] of the total mass of the
+      system resides.  [frac] must be between 0.0 (inclusive) and 1.0
+      (exclusive).  If [origin] is given, the radius is with respect
+      to it; otherwise the radius is with respect to the center of
+      mass of the system. *)
+  val lagrange_radius : ?origin : float array -> b array -> float -> float
+end
+
+module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
   module E = Energy.Make(B)
+
+  type b = B.b
 
   let pi = 4.0*.atan 1.0
 
@@ -67,95 +193,95 @@ module Make (B : Body.BODY) = struct
 
   let sorted_array_insert comp arr obj = 
     let n = Array.length arr in 
-    if comp obj arr.(n-1) < 0 then 
-      let rec loop = function 
-        | 0 -> 
+      if comp obj arr.(n-1) < 0 then 
+        let rec loop = function 
+          | 0 -> 
             if comp obj arr.(0) < 0 then begin
               arr.(1) <- arr.(0);
               arr.(0) <- obj
             end else
               arr.(1) <- obj
-        | i -> 
+          | i -> 
             if comp obj arr.(i) < 0 then begin
               arr.(i+1) <- arr.(i);
               loop (i - 1)
             end else
               arr.(i+1) <- obj in 
-      loop (n - 2)
-          
+          loop (n - 2)
+            
   let nearest_neighbors n bs b = 
     let q = B.q b in 
     let distance b1 b2 = 
       let q1 = B.q b1 and q2 = B.q b2 in 
-      if q1 == q then 
-        1
-      else if q2 == q then 
-        -1
-      else 
-        let d1 = Base.distance_squared q q1 and 
-            d2 = Base.distance_squared q q2 in 
-        if d1 > d2 then 
+        if q1 == q then 
           1
-        else if d1 < d2 then 
+        else if q2 == q then 
           -1
         else 
-          0 in 
+          let d1 = Base.distance_squared q q1 and 
+              d2 = Base.distance_squared q q2 in 
+            if d1 > d2 then 
+              1
+            else if d1 < d2 then 
+              -1
+            else 
+              0 in 
     let candidates = Array.sub bs 0 n in 
-    Array.fast_sort distance candidates;
-    for i = n to Array.length bs - 1 do 
-      sorted_array_insert distance candidates bs.(i)
-    done;
-    candidates
+      Array.fast_sort distance candidates;
+      for i = n to Array.length bs - 1 do 
+        sorted_array_insert distance candidates bs.(i)
+      done;
+      candidates
 
   let fold_left2 fn start a1 a2 = 
     let n = Array.length a1 in 
-    assert( n = Array.length a2); 
-    let value = ref (fn start a1.(0) a2.(0)) in 
-    for i = 1 to n - 1 do
-      value := fn !value a1.(i) a2.(i)
-    done;
-    !value      
+      assert( n = Array.length a2); 
+      let value = ref (fn start a1.(0) a2.(0)) in 
+        for i = 1 to n - 1 do
+          value := fn !value a1.(i) a2.(i)
+        done;
+        !value      
 
   let density_estimator n bs b = 
     let neighbors = nearest_neighbors n bs b in 
     let r = Base.distance (B.q b) (B.q neighbors.(n-1)) in 
     let mtot = (Array.fold_left (fun mt b -> mt +. (B.m b)) 0.0 neighbors) -.
-        (B.m neighbors.(n-1)) in 
-    3.0*.mtot/.(4.0*.pi*.(Base.cube r)) 
+      (B.m neighbors.(n-1)) in 
+      3.0*.mtot/.(4.0*.pi*.(Base.cube r)) 
 
   let density_center rhos bs = 
     let rhotot = Array.fold_left (+.) 0.0 rhos in 
-    fold_left2 
-      (fun rd b r -> 
-        let q = B.q b in 
-        for i = 0 to 2 do 
-          rd.(i) <- rd.(i) +. r/.rhotot*.q.(i)
-        done;
-        rd)
-      (Array.make 3 0.0)
-      bs 
-      rhos 
-      
+      fold_left2 
+        (fun rd b r -> 
+          let q = B.q b in 
+            for i = 0 to 2 do 
+              rd.(i) <- rd.(i) +. r/.rhotot*.q.(i)
+            done;
+            rd)
+        (Array.make 3 0.0)
+        bs 
+        rhos 
+        
   let density_radius n bs = 
     let rhos = Array.map (density_estimator n bs) bs in 
     let dc = density_center rhos bs in 
     let rtot = Array.fold_left (+.) 0.0 rhos in 
-    fold_left2 
-      (fun dr b r -> 
-        let d = Base.distance dc (B.q b) in 
-        dr +. d*.r/.rtot)
-      0.0
-      bs
-      rhos
+      fold_left2 
+        (fun dr b r -> 
+          let d = Base.distance dc (B.q b) in 
+            dr +. d*.r/.rtot)
+        0.0
+        bs
+        rhos
 
   let density_density n bs = 
     let rhos = Array.map (density_estimator n bs) bs in 
     let rho_tot = Array.fold_left (+.) 0.0 rhos in 
-    Array.fold_left 
-      (fun dd r -> 
-        dd +. (Base.square r)/.rho_tot)
-      0.0 
-      rhos      
+      Array.fold_left 
+        (fun dd r -> 
+          dd +. (Base.square r)/.rho_tot)
+        0.0 
+        rhos      
 
   (* We have that the circular velocity at radius r_c for an object of
      mass m_c is v_circ = sqrt(m_c/r_c).  This implices a
@@ -207,8 +333,6 @@ module Make (B : Body.BODY) = struct
         l)
       (Array.make 3 0.0)
       bs
-
-  exception Partial_load of B.b array array
 
   let load_states file = 
     let input = open_in file in 
@@ -327,8 +451,8 @@ module Make (B : Body.BODY) = struct
       (fun b -> 
         let q = B.q b and p = B.p b in 
         for i = 0 to 2 do 
-          q.(i) <- q.(i) +. scale*.(Random.float 1.0);
-          p.(i) <- p.(i) +. scale*.(Random.float 1.0)
+          q.(i) <- q.(i) +. scale*.(Random.float 1.0 -. 0.5);
+          p.(i) <- p.(i) +. scale*.(Random.float 1.0 -. 0.5)
         done)
       new_bs;
     new_bs
@@ -511,7 +635,7 @@ module Make (B : Body.BODY) = struct
         e = E.total_kinetic_energy bs in 
     2.0*.e/.(3.0*.n)
 
-  let bodies_to_el_phase_space bs = 
+  let bodies_to_el_phase_space ?(specific = false) bs = 
     Array.mapi 
       (fun i b -> 
         let lb = Base.norm (E.angular_momentum b) and 
@@ -524,7 +648,11 @@ module Make (B : Body.BODY) = struct
             pe := !pe +. E.potential_energy b bs.(j)
           done;
           let etot = ke +. !pe in 
-            [|etot; lb|])
+            if specific then 
+              let m = B.m b in 
+              [| etot /. m; lb /. m |]
+            else
+              [|etot; lb|])
       bs
 
   let lagrange_radius ?origin bs frac = 
@@ -538,6 +666,7 @@ module Make (B : Body.BODY) = struct
       let d1 = Base.distance_squared q1 origin and 
           d2 = Base.distance_squared q2 origin in 
         Pervasives.compare d1 d2 in 
+    let bs = Array.copy bs in
       Array.fast_sort compare bs;
       let mtot = total_mass bs in 
       let rec lagrange_radius_loop i m = 
