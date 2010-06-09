@@ -13,7 +13,6 @@ let sumfile = ref "summary.dat"
 let heavyfrac = ref 0.01
 let heavyfac = ref 10.0
 let sf = ref 1e-4
-let specific = ref true
 
 let options = 
   [("-seed", Arg.Int (fun i -> Random.init i), "set the random seed");
@@ -34,10 +33,7 @@ let options =
    ("-heavyfac", Arg.Set_float heavyfac,
     sprintf "factor of increase in mass for heavy bodies (default %g)" !heavyfac);
    ("-sf", Arg.Set_float sf,
-    sprintf "safety factor for integrator timestep (default %g)" !sf);
-   ("-specific", Arg.Set specific,
-    sprintf "output E and L in specific units (default %b)" !specific)
-  ]
+    sprintf "safety factor for integrator timestep (default %g)" !sf)]
 
 (* Should happen before we parse args *)
 let _ = 
