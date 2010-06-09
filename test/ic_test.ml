@@ -44,9 +44,26 @@ let test_hot_spherical_lagrange_radii () =
     assert_equal_float ~epsrel:0.1 0.793701 (A.lagrange_radius bs 0.5);
     assert_equal_float ~epsrel:0.1 0.90856 (A.lagrange_radius bs 0.75)
 
+let test_standard_units () = 
+  let bs = Array.init 1000
+    (fun _ -> 
+      B.make 0.0 1.0 
+        (Array.init 3 (fun _ -> Random.float 1.0))
+        (Array.init 3 (fun _ -> Random.float 0.01))) in
+  let bs = Ic.adjust_frame bs in 
+  let eini = E.energy bs in 
+  let bs' = Ic.rescale_to_standard_units bs in 
+  let efin' = E.energy bs' and 
+      efin = E.energy bs and
+      mtot = A.total_mass bs' in 
+    assert_equal_float ~msg:"bs changed" efin eini;
+    assert_equal_float ~msg:"bs' not in correct units" (-0.25) efin';
+    assert_equal_float ~msg:"bs' total_mass wrong" 1.0 mtot
+
 let tests = "ic.ml tests" >:::
   ["plummer model energy test" >:: test_plummer_energies;
    "make_{hot,cold}_spherical energy test" >:: test_spherical_energies;
    "plummer lagrange radii" >:: test_plummer_lagrange_radii;
    "cold_spherical lagrange radii" >:: test_cold_spherical_lagrange_radii;
-   "hot_spherical lagrange radii" >:: test_hot_spherical_lagrange_radii]
+   "hot_spherical lagrange radii" >:: test_hot_spherical_lagrange_radii;
+   "standard units test" >:: test_standard_units]

@@ -176,20 +176,28 @@ struct
         Array.map 
           (fun b -> 
             let t = B.t b and q = B.q b and p = B.p b and m = B.m b in 
-              B.make t (m/.mtot) q p)
+            let mnew = m /. mtot in 
+            let pnew = Array.make 3 0.0 in 
+              for i = 0 to 2 do 
+                pnew.(i) <- p.(i) *. mnew /. m
+              done;
+              B.make t (m/.mtot) q pnew)
           bs in
-      let ke = E.total_kinetic_energy bs and 
-          pe = E.total_potential_energy bs in 
-      let p_factor = sqrt (0.25 /. ke) and 
-          r_factor = 1.0/.((-0.5)/.pe) in 
-      Array.map 
-        (fun b -> 
-          let t = B.t b and 
-              m = B.m b and 
-              q = B.q b and 
-              p = B.p b in 
-          B.make t m (Array.map (( *. ) r_factor) q) (Array.map (( *. ) p_factor) p))
-        bs
+      let e = E.energy bs in
+        assert(e < 0.0);
+        let efactor = ((-0.25) /. e) in 
+          Array.map 
+            (fun b -> 
+              let q = B.q b and 
+                  p = B.p b in 
+              let qnew = Array.make 3 0.0 and 
+                  pnew = Array.make 3 0.0 in 
+                for i = 0 to 2 do 
+                  qnew.(i) <- q.(i) /. efactor;
+                  pnew.(i) <- p.(i) *. (sqrt efactor)
+                done;
+                B.make (B.t b) (B.m b) qnew pnew)
+            bs
 
     let rescale_mass b mnew = 
       let m = B.m b and 
