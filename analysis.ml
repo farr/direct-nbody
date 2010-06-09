@@ -126,11 +126,10 @@ module type ANALYSIS = sig
   (** Returns T such that ke = 3/2 N T. *)
   val body_temperature : b array -> float
 
-  (** [bodies_to_el_phase_space ?specific bs] returns an array
-      containing the energy and angular momentum of the corresponding
-      member of [bs].  When [specific] is [true], the specific energy
-      and angular momentum are returned instead. *)
-  val bodies_to_el_phase_space : ?specific : bool -> b array -> float array array
+  (** [bodies_to_el_phase_space bs] returns an array containing the
+      energy, specific energy, angular momentum, and specific angular
+      momentum of the corresponding member of [bs]. *)
+  val bodies_to_el_phase_space : b array -> float array array
 
   (** [lagrange_radius ?origin bs frac] returns the radius inside
       which a fraction of at least [frac] of the total mass of the
@@ -635,7 +634,7 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
         e = E.total_kinetic_energy bs in 
     2.0*.e/.(3.0*.n)
 
-  let bodies_to_el_phase_space ?(specific = false) bs = 
+  let bodies_to_el_phase_space bs = 
     Array.mapi 
       (fun i b -> 
         let lb = Base.norm (E.angular_momentum b) and 
@@ -648,11 +647,8 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
             pe := !pe +. E.potential_energy b bs.(j)
           done;
           let etot = ke +. !pe in 
-            if specific then 
-              let m = B.m b in 
-              [| etot /. m; lb /. m |]
-            else
-              [|etot; lb|])
+          let m = B.m b in
+            [| etot; etot /. m; lb; lb /. m |]) 
       bs
 
   let lagrange_radius ?origin bs frac = 

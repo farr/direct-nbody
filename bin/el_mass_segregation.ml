@@ -86,12 +86,12 @@ let write_states bs =
     bs
 
 let write_el bs = 
-  let el = A.bodies_to_el_phase_space ~specific:(!specific) bs in
+  let el = A.bodies_to_el_phase_space bs in
   let fname = sprintf "el-%g.dat" (A.time bs) in
   let out = open_out fname in 
     Array.iter 
       (fun el -> 
-        fprintf out "%g %g\n" el.(0) el.(1))
+        fprintf out "%g %g %g %g\n" el.(0) el.(1) el.(2) el.(3))
       el;
     close_out out;
     let light_fname = sprintf "el-light-%g.dat" (A.time bs) and 
@@ -103,9 +103,9 @@ let write_el bs =
       Array.iteri 
         (fun i el -> 
           if Adv.m bs.(i) = mhigh then 
-            fprintf heavy "%g %g\n" el.(0) el.(1)
+            fprintf heavy "%g %g %g %g\n" el.(0) el.(1) el.(2) el.(3)
           else
-            fprintf light "%g %g\n" el.(0) el.(1))
+            fprintf light "%g %g %g %g\n" el.(0) el.(1) el.(2) el.(3))
         el;
       close_out light;
       close_out heavy;
