@@ -41,7 +41,7 @@ let options =
 
 (* Should happen before we parse args *)
 let _ = 
-  let devr = open_in_bin "/dev/random" in 
+  let devr = open_in_bin "/dev/urandom" in 
   let state = Array.init 55 (fun _ -> input_binary_int devr) in 
     Random.full_init state;
     close_in devr
