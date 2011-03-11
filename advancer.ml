@@ -58,6 +58,8 @@ module A =
 
     type b = body
 
+    let follow_flag = ref false
+
     let gen_id =
       let id = ref 0 in 
       fun () -> 
@@ -307,7 +309,11 @@ module A =
         interact_bodies bs imin imax (t0 +. dt) (dt/.6.0);
         for i = imin to imax - 1 do 
           finish_body bs.(i) (t0+.dt);
-          h_adaptive sf bs.(i)
+          h_adaptive sf bs.(i);
+          if !follow_flag then
+            let b = bs.(i) in
+            Printf.printf "%d %g %g %g %g %g %g %g\n"
+              b.id b.t b.q.(0) b.q.(1) b.q.(2) (b.p.(0)/.b.m) (b.p.(1)/.b.m) (b.p.(2)/.b.m)
         done;  
         sort_range bs hmax_lt 0 imax
       end
