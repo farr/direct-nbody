@@ -312,8 +312,8 @@ module A =
           h_adaptive sf bs.(i);
           if !follow_flag then
             let b = bs.(i) in
-            Printf.printf "%d %g %g %g %g %g %g %g\n"
-              b.id b.t b.q.(0) b.q.(1) b.q.(2) (b.p.(0)/.b.m) (b.p.(1)/.b.m) (b.p.(2)/.b.m)
+            Printf.printf "%d %g %g %g %g %g %g %g %g\n"
+              b.id b.m b.t b.q.(0) b.q.(1) b.q.(2) (b.p.(0)/.b.m) (b.p.(1)/.b.m) (b.p.(2)/.b.m)
         done;  
         sort_range bs hmax_lt 0 imax
       end

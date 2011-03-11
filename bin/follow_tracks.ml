@@ -31,7 +31,7 @@ let _ =
   let filter bs = 
     Array.iter 
       (fun b -> 
-        Printf.printf "%d %g " b.A.id b.A.m;
+        Printf.printf "%d %g %g " b.A.id b.A.m b.A.t;
         print_array b.A.q;
         let v = Array.map (fun p -> p /. b.A.m) b.A.p in
           print_array v;
