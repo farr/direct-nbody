@@ -18,7 +18,7 @@ let options =
     "DE maximum relative error in energy tolerated")]
 
 let print_array v = 
-  Array.iter (fun x -> Printf.printf "%g " x) v
+  Array.iter (fun x -> Printf.printf "%20.15g " x) v
 
 let _ = 
   Arg.parse 
@@ -31,7 +31,7 @@ let _ =
   let filter bs = 
     Array.iter 
       (fun b -> 
-        Printf.printf "%d %g %g " b.A.id b.A.m b.A.t;
+        Printf.printf "%4d %20.15g %20.15g " b.A.id b.A.m b.A.t;
         print_array b.A.q;
         let v = Array.map (fun p -> p /. b.A.m) b.A.p in
           print_array v;
