@@ -321,9 +321,7 @@ module A =
           finish_body bs.(i) (t0+.dt);
           h_adaptive sf bs.(i);
           if !follow_flag then
-            let b = bs.(i) in
-            Printf.printf "%4d %20.15g %20.15g %20.15g %20.15g %20.15g %20.15g %20.15g %20.15g\n"
-              b.id b.m b.t b.q.(0) b.q.(1) b.q.(2) (b.p.(0)/.b.m) (b.p.(1)/.b.m) (b.p.(2)/.b.m)
+            print stdout bs.(i)
         done;  
         sort_range bs hmax_lt 0 imax
       end
