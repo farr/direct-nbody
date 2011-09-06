@@ -17,25 +17,11 @@
 
 open Base;;
 
-module type ADVANCER = 
-  sig
-    type b
-    val advance : b array -> float -> float -> b array
-  end
-      
-module type ADWBODY = 
-  sig
-    type b
-    val advance : b array -> float -> float -> b array
-    val t : b -> float
-    val m : b -> float
-    val q : b -> float array
-    val p : b -> float array
-    val next_t : b -> float
-    val make : float -> float -> float array -> float array -> b
-    val copy : b -> b
-  end
-      
+module type ADVANCER = sig
+  type b
+  val advance : b array -> float -> float -> b array
+end
+
 module A = 
   struct
     type body = {
@@ -58,6 +44,8 @@ module A =
 
     type b = body
 
+    type id = int
+
     let follow_flag = ref false
 
     let gen_id =
@@ -67,6 +55,7 @@ module A =
 	incr id;
 	res
 
+    let id b = b.id
     let t b = b.t
     let m b = b.m
     let q b = b.q
@@ -91,8 +80,17 @@ module A =
        cs = Array.copy b.cs
      }
 
-    let make_body t m q p = 
-      {id = gen_id ();
+    let print chan {id = id; t = t; m = m; q = q; p = p} = 
+      Printf.fprintf chan "--- !!Particle\n";
+      Printf.fprintf chan "id: %d\n" id;
+      Printf.fprintf chan "x:\n";
+      Printf.fprintf chan "  - %g\n  - %g\n  - %g\n" q.(0) q.(1) q.(2);
+      Printf.fprintf chan "v:\n";
+      Printf.fprintf chan "  - %g\n  - %g\n  - %g\n" (p.(0)/.m) (p.(1)/.m) (p.(2)/.m);
+      Printf.fprintf chan "m: %g\n" m
+
+    let make_body_id id t m q p = 
+      {id = id;
        t = t;
        m = m;
        q = Array.copy q;
@@ -109,17 +107,29 @@ module A =
        cs = Array.make 3 nan
      }
 
-    let make = make_body
+    let read chan = 
+      let id = Scanf.bscanf chan " --- !!Particle id: %d " (fun x -> x) in 
+      let t = Scanf.bscanf chan " t: %g " (fun t -> t) in
+      let q = Scanf.bscanf chan " x: - %g - %g - %g " (fun x y z -> [|x; y; z|]) in
+      let v = Scanf.bscanf chan " v: - %g - %g - %g " (fun vx vy vz -> [|vx; vy; vz|]) in
+      let m = Scanf.bscanf chan " m: %g " (fun m -> m) in
+        make_body_id id t m q (Array.map (fun v -> v *. m) v)
+
+    let make t m q p = make_body_id (gen_id ()) t m q p
     let copy = body_copy
 
     module Eg = Energy.Make(struct
       type b = body
+      type id = int
+      let id b = b.id
       let t b = b.t
       let m b = b.m
       let q b = b.q 
       let p b = b.p
       let make = make
       let copy = copy
+      let read = read
+      let print = print
     end)
 
     let kinetic_energy {m = m; p = p} = 

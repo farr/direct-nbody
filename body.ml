@@ -20,11 +20,15 @@ open Base;;
 module type BODY = 
   sig
     type b
+    type id
+    val id : b -> id
     val t : b -> float
     val m : b -> float
     val q : b -> float array
     val p : b -> float array
     val make : float -> float -> float array -> float array -> b
     val copy : b -> b
+    val print : out_channel -> b -> unit
+    val read : Scanf.Scanning.in_channel -> b
   end
 
