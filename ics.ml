@@ -181,7 +181,7 @@ struct
               for i = 0 to 2 do 
                 pnew.(i) <- p.(i) *. mnew /. m
               done;
-              B.make t (m/.mtot) q pnew)
+              B.make t mnew q pnew)
           bs in
       let e = E.energy bs in
         assert(e < 0.0);

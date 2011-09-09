@@ -39,7 +39,8 @@ module A =
         q0 : float array;
         q1 : float array;
         q2 : float array;
-        cs : float array
+        cs : float array;
+        mutable output_counter : int
       }
 
     type b = body
@@ -47,6 +48,7 @@ module A =
     type id = int
 
     let follow_flag = ref false
+    let nthin = ref 1
 
     let gen_id =
       let id = ref 0 in 
@@ -77,13 +79,15 @@ module A =
        dVdq0 = Array.copy b.dVdq0;
        dVdq1 = Array.copy b.dVdq1;
        dVdq2 = Array.copy b.dVdq2;
-       cs = Array.copy b.cs
+       cs = Array.copy b.cs;
+       output_counter = b.output_counter
      }
 
     let print chan {id = id; t = t; m = m; q = q; p = p} = 
       Printf.fprintf chan "--- !!Particle\n";
       Printf.fprintf chan "id: %d\n" id;
-      Printf.fprintf chan "x:\n";
+      Printf.fprintf chan "t: %g\n" t;
+      Printf.fprintf chan "r:\n";
       Printf.fprintf chan "  - %g\n  - %g\n  - %g\n" q.(0) q.(1) q.(2);
       Printf.fprintf chan "v:\n";
       Printf.fprintf chan "  - %g\n  - %g\n  - %g\n" (p.(0)/.m) (p.(1)/.m) (p.(2)/.m);
@@ -104,13 +108,14 @@ module A =
        dVdq0 = Array.make 3 nan;
        dVdq1 = Array.make 3 nan;
        dVdq2 = Array.make 3 nan;
-       cs = Array.make 3 nan
+       cs = Array.make 3 nan;
+       output_counter = 0
      }
 
     let read chan = 
       let id = Scanf.bscanf chan " --- !!Particle id: %d " (fun x -> x) in 
       let t = Scanf.bscanf chan " t: %g " (fun t -> t) in
-      let q = Scanf.bscanf chan " x: - %g - %g - %g " (fun x y z -> [|x; y; z|]) in
+      let q = Scanf.bscanf chan " r: - %g - %g - %g " (fun x y z -> [|x; y; z|]) in
       let v = Scanf.bscanf chan " v: - %g - %g - %g " (fun vx vy vz -> [|vx; vy; vz|]) in
       let m = Scanf.bscanf chan " m: %g " (fun m -> m) in
         make_body_id id t m q (Array.map (fun v -> v *. m) v)
@@ -320,8 +325,11 @@ module A =
         for i = imin to imax - 1 do 
           finish_body bs.(i) (t0+.dt);
           h_adaptive sf bs.(i);
-          if !follow_flag then
-            print stdout bs.(i)
+          if !follow_flag then begin
+            if bs.(i).output_counter mod !nthin = 0 then 
+              print stdout bs.(i);
+            bs.(i).output_counter <- bs.(i).output_counter + 1
+          end
         done;  
         sort_range bs hmax_lt 0 imax
       end
