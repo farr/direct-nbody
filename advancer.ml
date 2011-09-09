@@ -84,7 +84,7 @@ module A =
      }
 
     let print chan {id = id; t = t; m = m; q = q; p = p} = 
-      Printf.fprintf chan "--- !!Particle\n";
+      Printf.fprintf chan "--- !Particle\n";
       Printf.fprintf chan "id: %d\n" id;
       Printf.fprintf chan "t: %g\n" t;
       Printf.fprintf chan "r:\n";
@@ -113,7 +113,7 @@ module A =
      }
 
     let read chan = 
-      let id = Scanf.bscanf chan " --- !!Particle id: %d " (fun x -> x) in 
+      let id = Scanf.bscanf chan " --- !Particle id: %d " (fun x -> x) in 
       let t = Scanf.bscanf chan " t: %g " (fun t -> t) in
       let q = Scanf.bscanf chan " r: - %g - %g - %g " (fun x y z -> [|x; y; z|]) in
       let v = Scanf.bscanf chan " v: - %g - %g - %g " (fun vx vy vz -> [|vx; vy; vz|]) in
