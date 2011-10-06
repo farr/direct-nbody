@@ -5,3 +5,6 @@ _build
 *.byte
 runs
 *.dat
+index.html
+nbody.cma
+nbody.cmxa
