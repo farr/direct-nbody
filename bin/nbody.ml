@@ -11,7 +11,7 @@ let dt = ref 1.0
 
 let eemax = ref 1e-3
 
-let eta = ref 1e-4
+let eta = ref 1e-5
 
 let mmin = ref 0.1
 let mmax = ref 100.0
