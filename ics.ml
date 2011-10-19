@@ -22,6 +22,13 @@ module type IC =
   sig
     type b
 
+    (** [random_from_dist ?xmin ?xmax ?ymin ?ymax f] draws a random
+        number from the distribution given by [f].  The number will be
+        in the range [xmin] to [xmax]; [ymin] to [ymax] should bound
+        the magnitude of [f] over this range of arguments. *)
+    val random_from_dist : ?xmin : float -> ?xmax : float -> ?ymin : float -> 
+      ?ymax : float -> (float -> float) -> float
+
     (** Construct a constant-density spherical distribution with the
         given number of bodies at zero kinetic energy. *)
     val make_cold_spherical : int -> b array
@@ -50,8 +57,8 @@ module type IC =
         center-of-mass frame. *)
     val adjust_frame : b array -> b array
 
-  (** [add_mass_spectrum gen_mass bs] Construct a new system with
-      masses chosen according to the [gen_mass] function.  *)
+    (** [add_mass_spectrum gen_mass bs] Construct a new system with
+        masses chosen according to the [gen_mass] function.  *)
     val add_mass_spectrum : (unit -> float) -> b array -> b array
 
   end
