@@ -1,9 +1,11 @@
+true: debug
+
 <test> or <bin>: include
 
 <test/*.ml> : use_oUnit
 
 <bin/*.ml> : use_nbody, use_unix
 
-<**/*.ml> or <**/*.{native,byte}> : debug, use_unix, use_nbody
+<**/*.ml> or <**/*.{native,byte}> : use_unix, use_nbody
 
 <test/*.{native,byte}> : use_unix, use_oUnit
