@@ -11,7 +11,7 @@ let dt = ref 1.0
 
 let eemax = ref 1e-3
 
-let eta = ref 1e-5
+let eta = ref 5e-5
 
 let mmin = ref 0.1
 let mmax = ref 100.0
@@ -51,10 +51,11 @@ let summarize bs =
             twall = Sys.time () and
             rc = An.density_radius !nden bs and 
             rhoc = An.density_density !nden bs and 
+            rcm = Base.norm (An.center_of_mass bs) and
             lrs = Array.init 9 (fun i -> An.lagrange_radius bs ((float_of_int i)/.10.0 +. 0.1)) and 
             e = E.energy bs in
         let de = abs_float ((e +. 0.25) /. 0.25) in
-          Printf.fprintf sum "%g %g %g %g %g %g " t rc rhoc e de twall;
+          Printf.fprintf sum "%g %g %g %g %g %g %g " t rc rhoc rcm e de twall;
           for i = 0 to 7 do 
             Printf.fprintf sum "%g " lrs.(i)
           done;
@@ -76,8 +77,8 @@ let _ =
   Arg.parse opts (fun _ -> ()) "nbody.native OPT ...";
   let bs0 = 
     Ic.rescale_to_standard_units 
-      (Ic.add_mass_spectrum (fun () -> draw_power_law !alpha !mmin !mmax) 
-         (Ic.adjust_frame 
+      (Ic.adjust_frame 
+         (Ic.add_mass_spectrum (fun () -> draw_power_law !alpha !mmin !mmax)
             (Ic.make_hot_spherical !n))) in 
   let rec loop bs = 
     let new_bs = A.advance bs !dt !eta in 
