@@ -11,7 +11,7 @@ let dt = ref 1.0
 
 let eemax = ref 1e-3
 
-let eta = ref 1e-2
+let eta = ref 1e-4
 
 let mmin = ref 0.1
 let mmax = ref 100.0
@@ -34,7 +34,7 @@ let opts =
      ("-alpha", Arg.Set_float alpha, "ALPHA power-law slope of the stellar mass function");
      ("-nden", Arg.Set_int nden, "N number of neighbors to average over for density estimators")]
 
-module A = Leapfrog
+module A = Advancer.A
 module Ic = Ics.Make(A)
 module An = Analysis.Make(A)
 module E = An.E 
