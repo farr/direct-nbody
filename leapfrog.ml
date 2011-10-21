@@ -82,16 +82,20 @@ let kick
           vdr = dx*.dvx +. dy*.dvy +. dz*.dvz in
       let r = sqrt r2 in 
       let r3 = r2*.r in 
-        v1.(0) <- v1.(0) +. m2*.dt*.dx /. r3;
-        v1.(1) <- v1.(1) +. m2*.dt*.dy /. r3;
-        v1.(2) <- v1.(2) +. m2*.dt*.dz /. r3;
-        v2.(0) <- v2.(0) -. m1*.dt*.dx /. r3;
-        v2.(1) <- v2.(1) -. m1*.dt*.dy /. r3;
-        v2.(2) <- v2.(2) -. m1*.dt*.dz /. r3;
+      let c = dt /. r3 in 
+      let c1 = m2 *. c and 
+          c2 = m1 *. c in
+        v1.(0) <- v1.(0) +. c1*.dx;
+        v1.(1) <- v1.(1) +. c1*.dy;
+        v1.(2) <- v1.(2) +. c1*.dz;
+        v2.(0) <- v2.(0) -. c2*.dx;
+        v2.(1) <- v2.(1) -. c2*.dy;
+        v2.(2) <- v2.(2) -. c2*.dz;
         let tff2 = r3 /. (m1 +. m2) and 
             tc2 = r2 /. vsq in 
-        let dtff2 = 3.0 *. vdr *. tff2 /. r2 and
-            dtc2 = 2.0 *. vdr *. tc2 *. (1.0 +. (m1 +. m2) /. (vsq *. r)) /. r2 in
+        let scaled_vdr = vdr /. r2 in 
+        let dtff2 = 3.0 *. scaled_vdr *. tff2 and
+            dtc2 = 2.0 *. scaled_vdr *. tc2 *. (1.0 +. (m1 +. m2) /. (vsq *. r)) in
         let tff2 = abs_float (tff2 /. (1.0 -. 0.5 *. dtff2)) and
             tc2 = abs_float (tc2 /. (1.0 -. 0.5 *. dtc2)) in
         let tscale2 = min tff2 tc2 in 
