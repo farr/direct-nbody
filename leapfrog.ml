@@ -92,19 +92,16 @@ let kick
         v2.(1) <- v2.(1) -. c2*.dy;
         v2.(2) <- v2.(2) -. c2*.dz;
         let mtot = m1 +. m2 in 
-        let eta2 = eta*.eta in 
-        let tff2 = eta2 *. r3 /. mtot and 
-            tc2 = eta2 *. r2 /. vsq in 
+        let tff = eta *. (sqrt (r3 /. mtot)) and 
+            tc = eta *. (sqrt (r2 /. vsq)) in 
         let scaled_vdr = vdr /. r2 in 
-        let dtff2 = 3.0 *. scaled_vdr *. tff2 and
-            dtc2 = 2.0 *. scaled_vdr *. tc2 *. (1.0 +. mtot /. (vsq *. r)) in
-        let tff2 = abs_float (tff2 /. (1.0 -. 0.5 *. dtff2)) and
-            tc2 = abs_float (tc2 /. (1.0 -. 0.5 *. dtc2)) in
-        let tscale2 = min tff2 tc2 in 
-        let dt1sq = b1.dt_max*.b1.dt_max and 
-            dt2sq = b2.dt_max*.b2.dt_max in 
-          if dt1sq > tscale2 then b1.dt_max <- sqrt tscale2;
-          if dt2sq > tscale2 then b2.dt_max <- sqrt tscale2
+        let dtff = 1.5 *. scaled_vdr *. tff and
+            dtc = scaled_vdr *. tc *. (1.0 +. mtot /. (vsq *. r)) in
+        let tff = abs_float (tff /. (1.0 -. 0.5 *. dtff)) and
+            tc = abs_float (tc /. (1.0 -. 0.5 *. dtc)) in
+        let tscale = if tff < tc then tff else tc in
+          if b1.dt_max > tscale then b1.dt_max <- tscale;
+          if b2.dt_max > tscale then b2.dt_max <- tscale
 
 let sort_sub bs iend = 
   let subbs = Array.sub bs 0 iend in 

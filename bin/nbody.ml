@@ -11,7 +11,7 @@ let dt = ref 1.0
 
 let eemax = ref 1e-3
 
-let eta = ref 1e-3
+let eta = ref 1e-2
 
 let mmin = ref 0.1
 let mmax = ref 100.0
@@ -78,8 +78,7 @@ let _ =
   let bs0 = 
     Ic.rescale_to_standard_units 
       (Ic.adjust_frame 
-         (Ic.add_mass_spectrum (fun () -> draw_power_law !alpha !mmin !mmax)
-            (Ic.make_hot_spherical !n))) in 
+         (Ic.make_hot_spherical !n)) in 
   let rec loop bs = 
     let new_bs = A.advance bs !dt !eta in 
     let e = E.energy new_bs in 
