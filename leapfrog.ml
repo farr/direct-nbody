@@ -68,7 +68,7 @@ let drift dt ({t = t; q = q; v = v} as b) =
   q.(2) <- q.(2) +. dt*.v.(2)
 
 let kick 
-    dt 
+    eta dt 
     ({m = m1; q = q1; v = v1} as b1)
     ({m = m2; q = q2; v = v2} as b2) =
       let dx = q2.(0) -. q1.(0) and 
@@ -91,11 +91,13 @@ let kick
         v2.(0) <- v2.(0) -. c2*.dx;
         v2.(1) <- v2.(1) -. c2*.dy;
         v2.(2) <- v2.(2) -. c2*.dz;
-        let tff2 = r3 /. (m1 +. m2) and 
-            tc2 = r2 /. vsq in 
+        let mtot = m1 +. m2 in 
+        let eta2 = eta*.eta in 
+        let tff2 = eta2 *. r3 /. mtot and 
+            tc2 = eta2 *. r2 /. vsq in 
         let scaled_vdr = vdr /. r2 in 
         let dtff2 = 3.0 *. scaled_vdr *. tff2 and
-            dtc2 = 2.0 *. scaled_vdr *. tc2 *. (1.0 +. (m1 +. m2) /. (vsq *. r)) in
+            dtc2 = 2.0 *. scaled_vdr *. tc2 *. (1.0 +. mtot /. (vsq *. r)) in
         let tff2 = abs_float (tff2 /. (1.0 -. 0.5 *. dtff2)) and
             tc2 = abs_float (tc2 /. (1.0 -. 0.5 *. dtc2)) in
         let tscale2 = min tff2 tc2 in 
@@ -112,7 +114,7 @@ let sort_sub bs iend =
     done
 
 let rec find_can_advance_index bs iend dt eta = 
-  if iend = 0 || eta*.bs.(iend-1).dt_max < dt then 
+  if iend = 0 || bs.(iend-1).dt_max < dt then 
     iend
   else 
     find_can_advance_index bs (iend-1) dt eta
@@ -132,7 +134,7 @@ let rec advance_subsystem dt eta bs iend =
       done;
       for i = ibegin to iend - 1 do 
         for j = 0 to i - 1 do 
-          kick dt bs.(i) bs.(j)
+          kick eta dt bs.(i) bs.(j)
         done
       done;
       for i = ibegin to iend - 1 do 
@@ -151,7 +153,7 @@ let advance bs dt eta =
     done;
     for i = 0 to Array.length bs - 1 do 
       for j = i+1 to Array.length bs - 1 do 
-        kick 0.0 bs.(i) bs.(j)
+        kick eta 0.0 bs.(i) bs.(j)
       done
     done;
     Array.fast_sort (fun b1 b2 -> compare b1.dt_max b2.dt_max) bs;
