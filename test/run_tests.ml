@@ -1,8 +1,9 @@
 open OUnit
 
 let tests = "all tests" >:::
-  ["advancer.ml tests" >: Advance_test.tests;
-   "ic.ml tests" >: Ic_test.tests]
+  [Advance_test.tests;
+   Ic_test.tests;
+   Leapfrog_test.tests]
 
 let _ = 
   let _ = Random.self_init () in 
