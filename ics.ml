@@ -68,9 +68,10 @@ module type IC =
         given masses and orbital elements, in the center-of-mass frame. *)
     val generate_binary : float -> float -> orbit_elements -> b array
 
-    (** [shift_system bs r0] moves the origin of the coordinate system
-        of [bs] to [r0]. *)
-    val shift_system : b array -> float array -> b array
+    (** [shift_system bs r0 v0] moves the origin of the coordinate
+        system of [bs] to [r0], and the velocity reference frame to
+        [v0]. *)
+    val shift_system : b array -> float array -> float array -> b array
 
     (** [combine_systems bs1 bs2] combines the systems of bodies into
         a single system. *)
@@ -317,15 +318,16 @@ struct
         [|make_body 0.0 m1 r1 p1;
           make_body 0.0 m2 r2 p2|]
 
-    let shift_system bs r0 = 
+    let shift_system bs r0 v0 = 
       Array.map 
         (fun b -> 
           let t = B.t b and 
               r = B.q b and 
               p = B.p b and 
               m = B.m b in 
-          let r' = Array.mapi (fun i rx -> rx +. r0.(i)) r in 
-            make_body t m r' p)
+          let r' = Array.mapi (fun i rx -> rx +. r0.(i)) r and 
+              p' = Array.mapi (fun i px -> px +. m*.v0.(i)) p in
+            make_body t m r' p')
         bs
 
     let combine_systems : (b array -> b array -> b array) = Array.append 
