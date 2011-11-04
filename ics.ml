@@ -64,6 +64,12 @@ module type IC =
         masses chosen according to the [gen_mass] function.  *)
     val add_mass_spectrum : (unit -> float) -> b array -> b array
 
+    (** [elements_to_rv m1 m2 elts] returns [(r1,v1,r2,v2)] for the
+        binary with masses [(m1,m2)] and the given orbital
+        elements. *)
+    val elements_to_rv : float -> float -> orbit_elements -> 
+      (float array * float array * float array * float array)
+
     (** [generate_binary m1 m2 elts] generates a binary system with the
         given masses and orbital elements, in the center-of-mass frame. *)
     val generate_binary : float -> float -> orbit_elements -> b array
@@ -304,17 +310,23 @@ struct
           vy = a2*.l*.ce/.r in 
         ([|x; y; 0.0|], [|vx; vy; 0.0|])
 
-    let generate_binary m1 m2 elts = 
+    let elements_to_rv m1 m2 elts = 
       let (rxy, vxy) = orbit_rv_xy elts.m elts.a elts.e in 
       let (r, v1) = xy_to_orbit rxy vxy elts.i elts.capom elts.omega in 
       let a = elts.a in 
       let a3 = a*.a*.a in 
       let n = sqrt ((m1+.m2)/.a3) in 
       let v = Array.map (fun vx -> vx*.n) v1 in 
-      let p1 = Array.map (fun v -> ~-.m1*.m2*.v/.(m1+.m2)) v and 
-          p2 = Array.map (fun v -> m1*.m2*.v/.(m1+.m2)) v in 
+      let v1 = Array.map (fun v -> ~-.m2*.v/.(m1+.m2)) v and 
+          v2 = Array.map (fun v -> m1*.v/.(m1+.m2)) v in 
       let r1 = Array.map (fun r -> ~-.m2*.r/.(m1+.m2)) r and 
           r2 = Array.map (fun r -> m1*.r/.(m1+.m2)) r in 
+        (r1,v1,r2,v2)
+
+    let generate_binary m1 m2 elts = 
+      let (r1,v1,r2,v2) = elements_to_rv m1 m2 elts in 
+      let p1 = Array.map (fun x -> x*.m1) v1 and 
+          p2 = Array.map (fun x -> x*.m2) v2 in 
         [|make_body 0.0 m1 r1 p1;
           make_body 0.0 m2 r2 p2|]
 
@@ -347,5 +359,5 @@ struct
           e2 = random_between 0.0 1.0 in 
       let e = sqrt e2 and 
           i = acos cos_i in 
-        {m = m; a = a; e = e; i = i; capom = capom; omega = omega}        
+        {m = m; a = a; e = e; i = i; capom = capom; omega = omega}
   end
