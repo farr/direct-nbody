@@ -60,10 +60,21 @@ let test_standard_units () =
     assert_equal_float ~msg:"bs' not in correct units" (-0.25) efin';
     assert_equal_float ~msg:"bs' total_mass wrong" 1.0 mtot
 
+let test_shift_system () = 
+  let bs = Ic.make_plummer 100 in 
+  let v0 = Array.init 3 (fun _ -> Random.float 1.0 -. 0.5) and 
+      r0 = Array.init 3 (fun _ -> Random.float 1.0 -. 0.5) in 
+  let bs' = Ic.shift_system bs r0 v0 in 
+  let com' = A.center_of_mass bs' and 
+      ptot' = A.total_momentum bs' in 
+    assert_equal_float_array com' r0;
+    assert_equal_float_array ptot' v0
+
 let tests = "ic.ml tests" >:::
   ["plummer model energy test" >:: test_plummer_energies;
    "make_{hot,cold}_spherical energy test" >:: test_spherical_energies;
    "plummer lagrange radii" >:: test_plummer_lagrange_radii;
    "cold_spherical lagrange radii" >:: test_cold_spherical_lagrange_radii;
    "hot_spherical lagrange radii" >:: test_hot_spherical_lagrange_radii;
-   "standard units test" >:: test_standard_units]
+   "standard units test" >:: test_standard_units;
+   "shift_system test" >:: test_shift_system]

@@ -22,6 +22,16 @@ module type IC =
   sig
     type b
 
+    (** Orbital elements for binary description. *)
+    type orbit_elements = {
+      m : float; (** Mean anomaly. *)
+      a : float; (** Semi-major axis. *)
+      e : float; (** Eccentricity. *)
+      i : float; (** Inclination. *)
+      capom : float; (** Longitude of ascending node. *)
+      omega : float (** Argument of periapsis. *)
+    }
+
     (** [random_from_dist ?xmin ?xmax ?ymin ?ymax f] draws a random
         number from the distribution given by [f].  The number will be
         in the range [xmin] to [xmax]; [ymin] to [ymax] should bound
@@ -61,6 +71,25 @@ module type IC =
         masses chosen according to the [gen_mass] function.  *)
     val add_mass_spectrum : (unit -> float) -> b array -> b array
 
+    (** [elements_to_rv m1 m2 elts] returns [(r1,v1,r2,v2)] for the
+        binary with masses [(m1,m2)] and the given orbital
+        elements. *)
+    val elements_to_rv : float -> float -> orbit_elements -> 
+      (float array * float array * float array * float array)
+
+    (** [generate_binary m1 m2 elts] generates a binary system with the
+        given masses and orbital elements, in the center-of-mass frame. *)
+    val generate_binary : float -> float -> orbit_elements -> b array
+
+    (** [shift_system bs r0 v0] moves the origin of the coordinate
+        system of [bs] to [r0], and the velocity reference frame to
+        [v0]. *)
+    val shift_system : b array -> float array -> float array -> b array
+
+    (** [combine_systems bs1 bs2] combines the systems of bodies into
+        a single system. *)
+    val combine_systems : b array -> b array -> b array
+
   end
 
 module Make(B : BODY) : (IC with type b = B.b)  = 
@@ -69,6 +98,15 @@ struct
   module E = Energy.Make(B)
 
   type b = B.b
+
+  type orbit_elements = {
+    m : float;
+    a : float;
+    e : float;
+    i : float;
+    capom : float;
+    omega : float
+  }
 
   let make_body = B.make
 
@@ -222,4 +260,111 @@ struct
       let ind = -2.3 in
       let ind1 = ind +. 1.0 in 
         ((mmax**ind1 -. mmin**ind1)*.(Random.float 1.0) +. mmin**ind1)**(1.0 /. ind1)
+          
+    let kepler_eqn e manom eanom =
+      manom -. eanom +. e*.(sin eanom)
+
+    let bisect_solve epsabs f xmin xmax = 
+      let rec bisect_loop fxmin fxmax xmin xmax =
+        assert (fxmin *. fxmax <= 0.0);
+        let dx = xmax -. xmin in 
+          if dx <= epsabs then 
+            ~-.fxmin*.dx /. (fxmax -. fxmin)
+          else
+            let xmid = 0.5*.(xmin +. xmax) in 
+            let fxmid = f xmid in 
+              if fxmid *. fxmin <= 0.0 then 
+                bisect_loop fxmin fxmid xmin xmid
+              else
+                bisect_loop fxmid fxmax xmid xmax in 
+        bisect_loop (f xmin) (f xmax) xmin xmax
+
+    let solve_kepler e m = 
+      let f ecc = kepler_eqn e m ecc in 
+        bisect_solve 1e-12 f (m +. e) (m -. e)
+
+    let rotate_z v theta = 
+      let c = cos theta and 
+          s = sin theta in 
+        match v with 
+          | [|x; y; z|] -> 
+            [|c*.x -. s*.y; c*.y +. s*.x; z|]
+          | _ -> raise (Invalid_argument "rotate_z: expected three-vector")
+
+    let rotate_x v theta = 
+      let c = cos theta and 
+          s = sin theta in 
+        match v with 
+          | [|x; y; z|] -> 
+            [|x; c*.y -. s*.z; c*.z +. s*.y|]
+          | _ -> raise (Invalid_argument "rotate_x: expected three-vector")
+
+    let xy_to_orbit r v i capom om = 
+      let rotate v = 
+        rotate_z (rotate_x (rotate_z v om) capom) i in 
+        (rotate r, rotate v)
+
+    let orbit_rv_xy m a e = 
+      let ecc = solve_kepler e m in 
+      let se = sin ecc and 
+          ce = cos ecc and 
+          a2 = a*.a and 
+          l = sqrt (1.0 -. e*.e) in
+      let x = a*.(ce -. e) and
+          y = a*.l*.se in 
+      let r = sqrt (x*.x +. y*.y) in 
+      let vx = ~-.a2*.se/.r and 
+          vy = a2*.l*.ce/.r in 
+        ([|x; y; 0.0|], [|vx; vy; 0.0|])
+
+    let elements_to_rv m1 m2 elts = 
+      let (rxy, vxy) = orbit_rv_xy elts.m elts.a elts.e in 
+      let (r, v1) = xy_to_orbit rxy vxy elts.i elts.capom elts.omega in 
+      let a = elts.a in 
+      let a3 = a*.a*.a in 
+      let n = sqrt ((m1+.m2)/.a3) in 
+      let v = Array.map (fun vx -> vx*.n) v1 in 
+      let v1 = Array.map (fun v -> ~-.m2*.v/.(m1+.m2)) v and 
+          v2 = Array.map (fun v -> m1*.v/.(m1+.m2)) v in 
+      let r1 = Array.map (fun r -> ~-.m2*.r/.(m1+.m2)) r and 
+          r2 = Array.map (fun r -> m1*.r/.(m1+.m2)) r in 
+        (r1,v1,r2,v2)
+
+    let generate_binary m1 m2 elts = 
+      let (r1,v1,r2,v2) = elements_to_rv m1 m2 elts in 
+      let p1 = Array.map (fun x -> x*.m1) v1 and 
+          p2 = Array.map (fun x -> x*.m2) v2 in 
+        [|make_body 0.0 m1 r1 p1;
+          make_body 0.0 m2 r2 p2|]
+
+    let shift_system bs r0 v0 = 
+      Array.map 
+        (fun b -> 
+          let t = B.t b and 
+              r = B.q b and 
+              p = B.p b and 
+              m = B.m b in 
+          let r' = Array.mapi (fun i rx -> rx +. r0.(i)) r and 
+              p' = Array.mapi (fun i px -> px +. m*.v0.(i)) p in
+            make_body t m r' p')
+        bs
+
+    let combine_systems : (b array -> b array -> b array) = Array.append 
+
+    let pi = 4.0*.(atan 1.0)
+    let twopi = 2.0*.pi
+
+    let random_elements amin amax = 
+      let lamax = log amax and 
+          lamin = log amin in 
+      let la = random_between lamin lamax in 
+      let a = exp la and 
+          m = random_between 0.0 twopi and 
+          capom = random_between 0.0 twopi and 
+          omega = random_between 0.0 twopi and 
+          cos_i = random_between (-1.0) 1.0 and
+          e2 = random_between 0.0 1.0 in 
+      let e = sqrt e2 and 
+          i = acos cos_i in 
+        {m = m; a = a; e = e; i = i; capom = capom; omega = omega}
   end
