@@ -23,12 +23,18 @@ let sepast = 1e-4
 let i0jup = 50.0 *. pi /. 180.0
 let i0ast = 0.0
 
-let pjup = sqrt ((msun +. mjup) /. ajup**3.0)
-let past = sqrt ((msun +. 2.0*.mast) /. aast**3.0)
+let pjup = 2.0*.pi /. (sqrt ((msun +. mjup) /. ajup**3.0))
+let past = 2.0*.pi /. (sqrt ((msun +. 2.0*.mast) /. aast**3.0))
 
-let protast = sqrt (2.0*.mast /. sepast**3.0)
+let protast = 2.0 *. pi /. (sqrt (2.0*.mast /. sepast**3.0))
+
+let pkozai = 2.0*.pjup**2.0/.(3.0*.pi*.past)*.(msun +. 2.0*.mast +. mjup) /. mjup
+
+let _ = Printf.printf "Kozai period = %g\n%!" pkozai
 
 let dt = (min (min pjup past) protast) /. 200.0
+
+let nout = int_of_float (floor (pkozai /. (1000.0*.dt)))
  
 let step bs = 
   Array.iter (fun b -> Ad.drift (0.5*.dt) b) bs;
@@ -86,13 +92,13 @@ let output bs =
   let ajup = An.semi_major_axis jupsun.(0) jupsun.(1) and 
       ejup = An.eccentricity jupsun.(0) jupsun.(1) and 
       ijup = An.inclination jupsun.(0) jupsun.(1) in 
-    Printf.printf "%g %g %g %g %g %g %g %g %g %g\n"
+    Printf.printf "%g %g %g %g %g %g %g %g %g %g\n%!"
       (Ad.t bs.(0)) aast east iast asast esast isast ajup ejup ijup
 
 let _ = 
   output bs;
   while true do 
-    for i = 1 to 20000 do 
+    for i = 1 to nout do 
       step bs
     done;
     output bs
