@@ -90,6 +90,10 @@ module type IC =
         a single system. *)
     val combine_systems : b array -> b array -> b array
 
+    (** [random_elements amin amax] Produce a random set of orbital
+        elements with sma log-distributed between amin and amax,
+        eccentricity thermally distributed. *)
+    val random_elements : float -> float -> orbit_elements
   end
 
 module Make(B : BODY) : (IC with type b = B.b)  = 
@@ -280,8 +284,11 @@ struct
         bisect_loop (f xmin) (f xmax) xmin xmax
 
     let solve_kepler e m = 
-      let f ecc = kepler_eqn e m ecc in 
-        bisect_solve 1e-12 f (m +. e) (m -. e)
+      if e = 0.0 then 
+        m
+      else
+        let f ecc = kepler_eqn e m ecc in 
+          bisect_solve 1e-12 f (m +. e) (m -. e)
 
     let rotate_z v theta = 
       let c = cos theta and 
@@ -301,7 +308,7 @@ struct
 
     let xy_to_orbit r v i capom om = 
       let rotate v = 
-        rotate_z (rotate_x (rotate_z v om) capom) i in 
+        rotate_z (rotate_x (rotate_z v om) i) capom in 
         (rotate r, rotate v)
 
     let orbit_rv_xy m a e = 

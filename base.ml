@@ -117,3 +117,9 @@ let relative_error x t =
   abs_float ((x -. t) /. t);;
 (** [relative_error x true] computes the relative error on [x]
     relative to [true]. *)
+
+(** Cross product. *)
+let cross v w = 
+  [|v.(1)*.w.(2) -. v.(2)*.w.(1);
+    v.(2)*.w.(0) -. v.(0)*.w.(2);
+    v.(0)*.w.(1) -. v.(1)*.w.(0)|]

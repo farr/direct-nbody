@@ -70,6 +70,25 @@ let test_shift_system () =
     assert_equal_float_array com' r0;
     assert_equal_float_array ptot' v0
 
+let test_generate_binary () = 
+  for i = 0 to 100 do 
+    let m1 = Random.float 1.0 and 
+        m2 = Random.float 1.0 and 
+        elts = Ic.random_elements 0.1 100.0 in 
+    let bs = Ic.generate_binary m1 m2 elts in 
+      assert_bool "Not in COM frame" ((Base.norm (A.center_of_mass bs)) < 1e-8);
+      match bs with 
+        | [|b1; b2|] -> 
+          let e = A.binary_energy b1 b2 in 
+          let a = elts.Ic.a in
+          let ecc = A.eccentricity b1 b2 and 
+              i = A.inclination b1 b2 in 
+            assert_equal_float ~msg:"sma doesn't match energy" (~-.m1*.m2/.(2.0*.a)) e;
+            assert_equal_float ~msg:"eccentricity doesn't match" ecc elts.Ic.e;
+            assert_equal_float ~msg:"inclination doesn't match" i elts.Ic.i
+        | _ -> raise (Failure "generate binary didn't produce two bodies")
+  done
+
 let tests = "ic.ml tests" >:::
   ["plummer model energy test" >:: test_plummer_energies;
    "make_{hot,cold}_spherical energy test" >:: test_spherical_energies;
@@ -77,4 +96,5 @@ let tests = "ic.ml tests" >:::
    "cold_spherical lagrange radii" >:: test_cold_spherical_lagrange_radii;
    "hot_spherical lagrange radii" >:: test_hot_spherical_lagrange_radii;
    "standard units test" >:: test_standard_units;
-   "shift_system test" >:: test_shift_system]
+   "shift_system test" >:: test_shift_system;
+   "generate_binary test" >:: test_generate_binary]

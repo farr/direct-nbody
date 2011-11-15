@@ -116,12 +116,24 @@ module type ANALYSIS = sig
       each other). *)
   val binary_energy : b -> b -> float
 
+  (** Returns the binary angular momentum, in the orbit frame. *)
+  val binary_angular_momentum : b -> b -> float array
+
   (** Returns a list of all binaries in the given system and their
       binding energy. *)
   val binaries : b array -> ((b * b) * float) list
 
   (** Returns the most tightly bound binary in the system. *)
   val tightest_binary : b array -> b * b 
+
+  (** Returns the SMA for bound orbits. *)
+  val semi_major_axis : b -> b -> float
+
+  (** Returns the eccentricity of an orbit. *)
+  val eccentricity : b -> b -> float
+
+  (** Returns the inclination of an orbit. *)
+  val inclination : b -> b -> float
 
   (** Returns T such that ke = 3/2 N T. *)
   val body_temperature : b array -> float
@@ -138,6 +150,10 @@ module type ANALYSIS = sig
       to it; otherwise the radius is with respect to the center of
       mass of the system. *)
   val lagrange_radius : ?origin : float array -> b array -> float -> float
+
+  (** Given a system, produce a body with the same total mass, center of
+      mass, and total momentum. *)
+  val summary_body : b array -> b
 end
 
 module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
@@ -595,10 +611,22 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
     for i = 0 to 2 do 
       vrel.(i) <- p2.(i)/.m2 -. p1.(i)/.m1
     done;
-    let mu = m1*.m2/.(m1+.m1) in 
+    let mu = m1*.m2/.(m1+.m2) in 
     let ke = 0.5 *. mu *. (dot vrel vrel) and 
         pe = E.potential_energy b1 b2 in 
     ke +. pe
+
+  let binary_angular_momentum b1 b2 = 
+    let m1 = B.m b1 and m2 = B.m b2 and 
+        r1 = B.q b1 and r2 = B.q b2 and 
+        p1 = B.p b1 and p2 = B.p b2 in 
+    let mu = m1*.m2/.(m1+.m2) in
+    let v1 = Array.map (fun x -> x /. m1) p1 and 
+        v2 = Array.map (fun x -> x /. m2) p2 in 
+    let r = Array.mapi (fun i x -> x -. r1.(i)) r2 and 
+        v = Array.mapi (fun i x -> x -. v1.(i)) v2 in 
+    let lspec = cross r v in 
+      Array.map (fun x -> x *.mu) lspec
 
   (* Returns a list of ((b1,b2), e_rel). *)
   let binaries bs = 
@@ -628,6 +656,27 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
                  best)
              bin
              bins)
+
+  let semi_major_axis b1 b2 = 
+    let ebin = binary_energy b1 b2 and 
+        m1 = B.m b1 and 
+        m2 = B.m b2 in 
+      if ebin > 0.0 then 
+        raise (Failure "semi_major_axis: no SMA for unbound orbit")
+      else
+        ~-.m1*.m2/.(2.0*.ebin)
+
+  let eccentricity b1 b2 =
+    let l = norm (binary_angular_momentum b1 b2) and 
+        e = binary_energy b1 b2 in
+    let m1 = B.m b1 and m2 = B.m b2 in 
+    let mu = m1*.m2/.(m1+.m2) and 
+        alpha = m1*.m2 in 
+      sqrt (1.0 +. 2.0*.e*.l*.l/.(mu*.alpha*.alpha))
+
+  let inclination b1 b2 = 
+    let l = binary_angular_momentum b1 b2 in 
+      acos (l.(2) /. (norm l))      
 
   let body_temperature bs = 
     let n = float_of_int (Array.length bs) and 
@@ -674,4 +723,6 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
               lagrange_radius_loop (i+1) m in
         lagrange_radius_loop 0 0.0
 
+  let summary_body bs = 
+    B.make (B.t bs.(0)) (total_mass bs) (center_of_mass bs) (total_momentum bs)
 end

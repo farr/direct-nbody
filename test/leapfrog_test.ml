@@ -20,7 +20,6 @@ let test_leap_energy () =
       e2 = E.energy (advance bs 1.0 5e-4) in
   let de1 = abs_float ((e1 +. 0.25) /. 0.25) and 
       de2 = abs_float ((e2 +. 0.25) /. 0.25) in 
-    Printf.fprintf stderr "e1 = %g, e2 = %g, de1 = %g, de2 = %g\n" e1 e2 de1 de2;
   let r = de1 /. de2 in 
     assert_bool (Printf.sprintf "energy scaling = %g (should be about 4)" r)
       ((r < (sqrt 32.0)) && (r > (sqrt 8.0)))
