@@ -18,9 +18,11 @@ let msun = 1.0
 let aast = 1.0
 let ajup = 10.0
 
+let e0ast = 1e-3
+
 let sepast = 1e-4
 
-let i0jup = 50.0 *. pi /. 180.0
+let i0jup = 80.0 *. pi /. 180.0
 let i0ast = 0.0
 
 let pjup = 2.0*.pi /. (sqrt ((msun +. mjup) /. ajup**3.0))
@@ -29,8 +31,6 @@ let past = 2.0*.pi /. (sqrt ((msun +. 2.0*.mast) /. aast**3.0))
 let protast = 2.0 *. pi /. (sqrt (2.0*.mast /. sepast**3.0))
 
 let pkozai = 2.0*.pjup**2.0/.(3.0*.pi*.past)*.(msun +. 2.0*.mast +. mjup) /. mjup
-
-let _ = Printf.printf "Kozai period = %g\n%!" pkozai
 
 let dt = (min (min pjup past) protast) /. 200.0
 
@@ -64,7 +64,7 @@ let mutual_inclination bs1 bs2 =
 
 let asts = 
   let m = Random.float (2.0*.pi) in 
-    Ic.generate_binary mast mast {Ic.m = m; a = sepast; e = 0.0; i = i0ast; capom = 0.0; omega = 0.0}
+    Ic.generate_binary mast mast {Ic.m = m; a = sepast; e = e0ast; i = i0ast; capom = 0.0; omega = 0.0}
 
 let jupsun = 
   Ic.generate_binary mjup msun {Ic.m = Random.float (2.0*.pi); a = ajup; i = i0jup; e = 0.0; capom = 0.0; omega = 0.0}
@@ -72,11 +72,16 @@ let jupsun =
 let (_,_,rast,vast) = 
   Ic.elements_to_rv msun (2.0*.mast) {Ic.m = Random.float (2.0*.pi); a = aast; i = i0ast; e = 0.0; capom = 0.0; omega = 0.0}
 
-let bs = Ic.combine_systems jupsun (Ic.shift_system asts rast vast)
+let bs = Ic.adjust_frame (Ic.combine_systems jupsun (Ic.shift_system asts rast vast))
 
 let get_asts bs = afilter (fun b -> Ad.m b = mast) bs
 let get_jupsun bs = afilter (fun b -> not (Ad.m b = mast)) bs
 let get_sun bs = (afilter (fun b -> Ad.m b = msun) bs).(0)
+
+let mutual_inclination b1 b2 b3 b4 = 
+  let l1 = An.binary_angular_momentum b1 b2 and 
+      l2 = An.binary_angular_momentum b3 b4 in 
+    acos ((dot l1 l2) /. (norm l1) /. (norm l2))
 
 let output bs = 
   let asts = get_asts bs and 
@@ -92,8 +97,10 @@ let output bs =
   let ajup = An.semi_major_axis jupsun.(0) jupsun.(1) and 
       ejup = An.eccentricity jupsun.(0) jupsun.(1) and 
       ijup = An.inclination jupsun.(0) jupsun.(1) in 
-    Printf.printf "%g %g %g %g %g %g %g %g %g %g\n%!"
-      (Ad.t bs.(0)) aast east iast asast esast isast ajup ejup ijup
+  let imutsunasts = mutual_inclination sun ast_summary asts.(0) asts.(1) and
+      imutjupast = mutual_inclination sun ast_summary jupsun.(0) jupsun.(1) in
+    Printf.printf "%g %g %g %g %g %g %g %g %g %g %g %g\n%!"
+      (Ad.t bs.(0)) aast east iast asast esast isast ajup ejup ijup imutsunasts imutjupast
 
 let _ = 
   output bs;
