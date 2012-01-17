@@ -37,6 +37,11 @@ module type ANALYSIS = sig
       Astrophysical Journal, vol. 298, p. 80, 1985. *)
   val density_estimator : int -> b array -> b -> float
 
+  (** [density_squared_estimator n bs b] returns an unbiased estimator
+      for the density squared in the system [bs] at the position of
+      [b].  See Casertano and Hut. *)
+  val density_squared_estimator : int -> b array -> b -> float
+
   (** [density_center rhos bs] returns the location of the
       density-weighted center of the system [bs].  [rhos] is an array
       of containing the density estimate at the location of each [b].
@@ -263,6 +268,11 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
     let mtot = (Array.fold_left (fun mt b -> mt +. (B.m b)) 0.0 neighbors) -.
       (B.m neighbors.(n-1)) in 
       3.0*.mtot/.(4.0*.pi*.(Base.cube r)) 
+
+  let density_squared_estimator n bs b = 
+    let rho = density_estimator n bs b and 
+        nf = float_of_int n in 
+      (nf -. 2.0) /. (nf -. 1.0) *. rho *. rho
 
   let density_center rhos bs = 
     let rhotot = Array.fold_left (+.) 0.0 rhos in 
