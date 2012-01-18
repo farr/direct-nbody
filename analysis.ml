@@ -57,6 +57,15 @@ module type ANALYSIS = sig
       [b].  See Casertano and Hut. *)
   val density_squared_estimator : int -> b array -> b -> float
 
+  (** [density_estimators n bs] returns an array of density estimates at
+      each body's position using [n] nearest neighbors. *)
+  val density_estimators : int -> b array -> float array
+
+  (** [density_squared_estimators n bs] returns an array of
+      density-squared estimates at each body's position using [n]
+      nearest neighbors. *)
+  val density_squared_estimators : int -> b array -> float array
+
   (** [density_center rhos bs] returns the location of the
       density-weighted center of the system [bs].  [rhos] is an array
       of containing the density estimate at the location of each [b].
@@ -403,6 +412,20 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
         nf = float_of_int n in 
       (nf -. 2.0) /. (nf -. 1.0) *. rho *. rho
 
+  let density_estimators n bs = 
+    let t = bodies_to_neighbor_tree bs in 
+      Array.map (fun b -> 
+        let nbrs = nearest_neighbors n b t in 
+        let r = Base.distance (B.q b) (B.q nbrs.(n-1)) in 
+        let v = 4.0/.3.0*.pi*.r*.r*.r and 
+            m = (Array.fold_left (fun mtot b -> mtot +. B.m b) 0.0 nbrs)/.(float_of_int n) in 
+          (float_of_int (n-1))*.m/.v)
+        bs
+
+  let density_squared_estimators n bs = 
+    let rhos = density_estimators n bs in 
+      Array.map (fun rho -> let nf = float_of_int n in (nf -. 2.0) /. (nf -. 1.0) *. rho *. rho) rhos
+
   let density_center rhos bs = 
     let rhotot = Array.fold_left (+.) 0.0 rhos in 
       fold_left2 
@@ -417,7 +440,7 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
         rhos 
         
   let density_radius n bs = 
-    let rhos = Array.map (density_estimator n bs) bs in 
+    let rhos = density_squared_estimators n bs in 
     let dc = density_center rhos bs in 
     let rtot = Array.fold_left (+.) 0.0 rhos in 
       fold_left2 
@@ -429,7 +452,7 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
         rhos
 
   let density_density n bs = 
-    let rhos = Array.map (density_estimator n bs) bs in 
+    let rhos = density_squared_estimators n bs in 
     let rho_tot = Array.fold_left (+.) 0.0 rhos in 
       Array.fold_left 
         (fun dd r -> 
