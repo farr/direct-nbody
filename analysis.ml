@@ -25,9 +25,24 @@ module type ANALYSIS = sig
   (** Embedded energy calculating module. *)
   module E : Energy.ENERGY with type b = b
 
-  (** [nearest_neighbors n bs b] returns the [n] nearest neighbors to
-      [b] out of the bodies [bs]. *)
-  val nearest_neighbors : int -> b array -> b -> b array
+  (** Abstract data structure to help with searching for neighbors. *)
+  type tree
+
+  (** Construct a neighbor tree from the given bodies.  This process
+      takes O(N*log(N)) time. *)
+  val bodies_to_neighbor_tree : b array -> tree
+
+  (** [nearest_neighbors n b t] returns the [n] nearest neighbors to
+      [b] (not including [b]) out of the bodies in the neighbor tree
+      [t].  This process takes O(log(N)) time. *)
+  val nearest_neighbors : int -> b -> tree -> b array
+
+  (** [nearest_neighbors_slow n bs b] returns the [n] nearest
+      neighbors to [b] in [bs] without taking advantage of the
+      neighbor tree.  The operation is O(N), and therefore may be
+      desirable over nearest_neighbors if only a few neighbor lists
+      are to be constructed. *)
+  val nearest_neighbors_slow : int -> b array -> b -> b array
 
   (** [density_estimator n bs b] returns the
       [n]th-nearest-neighbor-based density estimator for the local
@@ -228,8 +243,122 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
             end else
               arr.(i+1) <- obj in 
           loop (n - 2)
-            
-  let nearest_neighbors n bs b = 
+
+  type tree = 
+    | Empty of float array * float array
+    | Body of b * float array * float array
+    | Cell of float array * float array * tree array
+
+  let bounds_of_bodies bs = 
+    Array.fold_left
+      (fun (low,high) b -> 
+        let q = B.q b in
+          for i = 0 to 2 do 
+            if low.(i) > q.(i) then low.(i) <- q.(i);
+            if high.(i) < q.(i) then high.(i) <- q.(i)
+          done;
+          (low,high))
+      (Array.make 3 infinity, Array.make 3 neg_infinity)
+      bs
+
+  let in_bounds x low high = 
+    let n = Array.length x in 
+    let rec loop i = 
+      if i >= n then 
+        true
+      else if x.(i) >= low.(i) && x.(i) <= high.(i) then 
+        loop (i+1)
+      else
+        false in 
+      loop 0
+
+  let sub_index x low high = 
+    let ind = ref 0 in 
+      for i = 0 to 2 do
+        let mid = 0.5*.(low.(i) +. high.(i)) in 
+          if x.(i) >= mid then 
+            ind := !ind + (1 lsl i)
+      done;
+      !ind
+
+  let sub_bounds i low high = 
+    let sub_low = Array.make 3 0.0 and 
+        sub_high = Array.make 3 0.0 in 
+      for j = 0 to 2 do 
+        if i land (1 lsl j) <> 0 then begin
+          sub_low.(j) <- 0.5*.(low.(j) +. high.(j));
+          sub_high.(j) <- high.(j)
+        end else begin
+          sub_low.(j) <- low.(j);
+          sub_high.(j) <- 0.5*.(low.(j) +. high.(j))
+        end
+      done;
+      (sub_low, sub_high)
+
+  let rec insert b = function 
+    | Empty(low, high) -> 
+      Body(b, low, high)
+    | Body(b', low, high) -> 
+      insert b (insert b' (Cell(low, high, Array.init 8 (fun i -> let (l,h) = sub_bounds i low high in Empty(l,h)))))
+    | Cell(low, high, sub_trees) -> 
+      let i = sub_index (B.q b) low high in 
+        Cell(low, high, Array.mapi (fun j st -> if j = i then insert b st else st) sub_trees)
+
+  let bodies_to_neighbor_tree bs = 
+    let (low,high) = bounds_of_bodies bs in 
+      Array.fold_left (fun t b -> insert b t) (Empty (low,high)) bs
+
+  let distance_to_cell pt low high = 
+    if in_bounds pt low high then 
+      0.0
+    else begin
+      let dst2 = ref 0.0 in 
+        for i = 0 to 2 do 
+          let d = 
+            if pt.(i) < low.(i) then 
+              low.(i) -. pt.(i)
+            else if pt.(i) > high.(i) then 
+              pt.(i) -. high.(i) 
+            else
+              0.0 in 
+            dst2 := !dst2 +. d*.d
+        done;
+        sqrt !dst2
+    end
+
+  let rec last = function 
+    | [] -> raise (Invalid_argument "last")
+    | [x] -> x
+    | x :: ys -> last ys
+
+  let rec take n l = 
+    if n <= 0 then 
+      []
+    else match l with 
+      | [] -> []
+      | x :: xs -> x :: (take (n-1) xs)
+
+  let compare_distance b b' b'' = 
+    Pervasives.compare (Base.distance (B.q b) (B.q b')) (Base.distance (B.q b) (B.q b''))
+
+  let nearest_neighbors n b tree = 
+    let rec nn_helper nbrs t = 
+      let dmax = if List.length nbrs < n then infinity else Base.distance (B.q b) (B.q (last nbrs)) in 
+        match t with 
+          | Empty(_,_) -> nbrs
+          | Body(b', _, _) -> 
+            if not (b' == b) && Base.distance (B.q b) (B.q b') < dmax then 
+              take n (List.sort (compare_distance b) (b' :: nbrs))
+            else
+              nbrs
+          | Cell(low, high, sub_ts) -> 
+            if distance_to_cell (B.q b) low high > dmax then 
+              nbrs 
+            else
+              Array.fold_left nn_helper nbrs sub_ts in 
+      Array.of_list (nn_helper [] tree)
+
+  let nearest_neighbors_slow n bs b = 
     let q = B.q b in 
     let distance b1 b2 = 
       let q1 = B.q b1 and q2 = B.q b2 in 
@@ -263,7 +392,7 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
         !value      
 
   let density_estimator n bs b = 
-    let neighbors = nearest_neighbors n bs b in 
+    let neighbors = nearest_neighbors_slow n bs b in 
     let r = Base.distance (B.q b) (B.q neighbors.(n-1)) in 
     let mtot = (Array.fold_left (fun mt b -> mt +. (B.m b)) 0.0 neighbors) -.
       (B.m neighbors.(n-1)) in 

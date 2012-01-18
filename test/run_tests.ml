@@ -2,6 +2,7 @@ open OUnit
 
 let tests = "all tests" >:::
   [Advance_test.tests;
+   Analysis_test.tests;
    Ic_test.tests;
    Leapfrog_test.tests]
 
