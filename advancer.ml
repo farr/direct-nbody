@@ -19,7 +19,7 @@ open Base;;
 
 module type ADVANCER = sig
   type b
-  val advance : b array -> float -> float -> b array
+  val advance : ?extpot : (float array -> float array) -> b array -> float -> float -> b array
 end
 
 module A = 
@@ -299,10 +299,24 @@ module A =
 	a.(i) <- temp.(i - low)
       done
 
-    let rec advance_range bs imax dt sf = 
+    let do_external_potential b = function 
+      | None -> ()
+      | Some(gradV) -> 
+        let h = b.h and 
+            dVdq0 = b.dVdq0 and dVdq1 = b.dVdq1 and dVdq2 = b.dVdq2 and 
+            q0 = b.q0 and q1 = b.q1 and q2 = b.q2 in 
+        let gv0 = gradV q0 and gv1 = gradV q1 and gv2 = gradV q2 in 
+          for i = 0 to 2 do 
+            dVdq0.(i) <- dVdq0.(i) +. h*.gv0.(i)/.6.0;
+            dVdq1.(i) <- dVdq1.(i) +. 2.0*.h*.gv1.(i)/.3.0;
+            dVdq2.(i) <- dVdq2.(i) +. h*.gv2.(i)/.6.0
+          done
+          
+
+    let rec advance_range bs imax dt sf extpot = 
       if bs.(imax-1).hmax < dt then begin
-        advance_range bs imax (dt/.2.0) sf;
-        advance_range bs imax (dt/.2.0) sf
+        advance_range bs imax (dt/.2.0) sf extpot;
+        advance_range bs imax (dt/.2.0) sf extpot
       end else begin
         let imin = let rec loop i = 
           if i < 0 then 
@@ -318,11 +332,12 @@ module A =
         done;
         let t0 = bs.(imin).t in 
         interact_bodies bs imin imax t0 (dt/.6.0);
-        if imin > 0 then advance_range bs imin (dt/.2.0) sf;
+        if imin > 0 then advance_range bs imin (dt/.2.0) sf extpot;
         interact_bodies bs imin imax (t0 +. 0.5*.dt) (2.0*.dt/.3.0);
-        if imin > 0 then advance_range bs imin (dt/.2.0) sf;
+        if imin > 0 then advance_range bs imin (dt/.2.0) sf extpot;
         interact_bodies bs imin imax (t0 +. dt) (dt/.6.0);
         for i = imin to imax - 1 do 
+          do_external_potential bs.(i) extpot;
           finish_body bs.(i) (t0+.dt);
           h_adaptive sf bs.(i);
           if !follow_flag then begin
@@ -404,11 +419,11 @@ module A =
       | FP_normal -> false
       | _ -> true
 
-    let advance bs dt sf = 
+    let advance ?extpot bs dt sf = 
       let bs = Array.map body_copy bs in 
       if vec_any first_step bs then 
         initialize_before_first_step bs sf;
       Array.fast_sort hmax_lt bs;
-      advance_range bs (Array.length bs) dt sf;
+      advance_range bs (Array.length bs) dt sf extpot;
       bs
   end

@@ -20,7 +20,6 @@ let test_density_radius () =
   let rhos = An.density_squared_estimators 6 bs in 
   let r = An.density_radius rhos bs in 
   let rexact = 189.0 /. 640.0 in
-    Printf.fprintf stderr "r = %g\n" r;
     assert_bool "r too large" (r < 2.0*.rexact);
     assert_bool "r too small" (r > 0.5*.rexact)
 
