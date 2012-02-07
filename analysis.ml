@@ -108,6 +108,9 @@ module type ANALYSIS = sig
   (** Returns the center of mass of the given system. *)
   val center_of_mass : b array -> float array
 
+  (** Returns the angular momentum of a body. *)
+  val angular_momentum : b -> float array
+
   (** Returns the total angular momentum of the system about the
       origin. *)
   val total_angular_momentum : b array -> float array
@@ -527,10 +530,16 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
       (Array.make 3 0.0)
       bs
 
+  let angular_momentum b = 
+    let p = B.p b and q = B.q b in 
+      [|q.(1)*.p.(2) -. q.(2)*.p.(1);
+        q.(2)*.p.(0) -. q.(0)*.p.(2);
+        q.(0)*.p.(1) -. q.(1)*.p.(0)|]
+
   let total_angular_momentum bs = 
     Array.fold_left 
       (fun l b ->
-        let lb = E.angular_momentum b in
+        let lb = angular_momentum b in
         for i = 0 to 2 do 
           l.(i) <- l.(i) +. lb.(i)
         done;
@@ -875,7 +884,7 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
   let bodies_to_el_phase_space bs = 
     Array.mapi 
       (fun i b -> 
-        let lb = Base.norm (E.angular_momentum b) and 
+        let lb = Base.norm (angular_momentum b) and 
             ke = E.kinetic_energy b and 
             pe = ref 0.0 in 
           for j = 0 to i - 1 do 
