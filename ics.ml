@@ -58,6 +58,15 @@ module type IC =
         ratio (KE/PE).  *)
     val make_spherical_out_of_equilibrium : int -> float -> b array
 
+    (** [make_flat_sis n] produces a cold distribution of stars with a
+        flattened singular-isothermal-sphere profile: rho(r) = 1 if r
+        < 1, rho(r) = 1/r^2 if 1 < r < 90/8, rho(r) = 0 otherwise. *)
+    val make_flat_sis : int -> b array
+
+    (** [make_hubble n] produces a cold distribution of stars with a
+        Hubble density profile: rho(r) = 1/(1+r^2) for r < 40/pi. *)
+    val make_hubble : int -> b array
+
     (** Construct a new system that represents the given system, but
         in "standard" units: Mtot = 1, E = -1/4, virial ratio =
         0.5. *)
@@ -113,6 +122,8 @@ struct
   }
 
   let make_body = B.make
+
+  let pi = 3.1415926535897932385
 
   let adjust_frame bs = 
     let p_tot = A.total_momentum bs and 
@@ -192,6 +203,44 @@ struct
 	      v = random_between 0.0 v0 in 
 	    make_body 0.0 m (random_vector r) (random_vector (m *. v))) in 
       adjust_frame bs
+
+  let make_flat_sis n = 
+    let m = 1.0 /. (float_of_int n) in 
+    let bs = 
+      Array.init n 
+        (fun i -> 
+          let mfrac = Random.float 1.0 in 
+          let mfrac1 = 4.0 /. 127.0 in
+          let r = 
+            if mfrac <= mfrac1 then 
+              (* Inside the core. *)
+              (mfrac /. mfrac1)**(1.0/.3.0)
+            else
+              (mfrac /. mfrac1 +. 2.0)/.3.0 in
+            make_body 0.0 m (random_vector r) (Array.make 3 0.0)) in
+      adjust_frame bs
+
+  let solve f xmin xmax = 
+    let rec loop xmin xmax fmin fmax = 
+      if xmax -. xmin < 1e-8 then 
+        (fmax*.xmin -. fmin*.xmax) /. (fmax -. fmin)
+      else 
+        let xmid = 0.5*.(xmin +. xmax) in 
+        let fmid = f xmid in 
+          if fmid *. fmin < 0.0 then 
+            loop xmin xmid fmin fmid
+          else
+            loop xmid xmax fmid fmax in
+      loop xmin xmax (f xmin) (f xmax)
+
+  let make_hubble n = 
+    let m = 1.0 /. (float_of_int n) in 
+    let bs = Array.init n (fun i -> 
+      let mfrac = Random.float 1.0 in 
+      let f r = pi*.((atan r) -. r) /. (-40.0 +. pi*.(atan (40.0/.pi))) -. mfrac in 
+      let r = solve f 0.0 (40.0/.pi) in 
+        make_body 0.0 m (random_vector r) (Array.make 3 0.0)) in 
+      adjust_frame bs      
 
   let from_nbody2_file name n = 
     let in_buffer = Scanf.Scanning.from_file name in 

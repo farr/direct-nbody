@@ -25,6 +25,17 @@ module type ANALYSIS = sig
   (** Embedded energy calculating module. *)
   module E : Energy.ENERGY with type b = b
 
+  (** [average xs] computes the average of the xs. *)
+  val average : float array -> float
+
+  (** [variance xs] computes the unbiased variance estimator for the
+      xs. *)
+  val variance : float array -> float
+
+  (** [standard_deviation xs] returns the standard deviation of the
+      xs. *)
+  val standard_deviation : float array -> float
+
   (** Abstract data structure to help with searching for neighbors. *)
   type tree
 
@@ -73,16 +84,15 @@ module type ANALYSIS = sig
       ({!Analysis.ANALYSIS.density_estimator}).*)
   val density_center : float array -> b array -> float array
 
-  (** [density_radius n bs] returns the density-weighted radius
-      estimate for the core radius (using [n] nearest neighbors to
-      estimate the density).  See Casertano and Hut
-      ({!Analysis.ANALYSIS.density_estimator}).*)
-  val density_radius : int -> b array -> float
+  (** [density_radius rhos bs] returns the weighted radius estimate
+      for the core radius, using [rhos] for the weighting.  See
+      Casertano and Hut ({!Analysis.ANALYSIS.density_estimator}).*)
+  val density_radius : float array -> b array -> float
 
-  (** [density_density n bs] returns the density-weighted core density
-      estimate (using [n] nearest neighbors to estimate the density).
-      See Casertano and Hut ({!Analysis.ANALYSIS.density_estimator}).*)
-  val density_density : int -> b array -> float
+  (** [density_density rhos bs] returns the weighted core density
+      estimate using [rhos] for the weighting.  See Casertano and Hut
+      ({!Analysis.ANALYSIS.density_estimator}).*)
+  val density_density : float array -> b array -> float
 
   (** [core_crossing_time n bs] uses the [n]th nearest neighbor
       density estimator to compute a core density for the system [bs],
@@ -191,6 +201,24 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
   type b = B.b
 
   let pi = 4.0*.atan 1.0
+
+  let average xs = 
+    let sum = ref 0.0 in 
+      for i = 0 to Array.length xs - 1 do 
+        sum := !sum +. xs.(i)
+      done;
+      !sum /. (float_of_int (Array.length xs))
+
+  let variance xs = 
+    let mu = average xs and 
+        sum = ref 0.0 in 
+      for i = 0 to Array.length xs - 1 do 
+        let d = xs.(i) -. mu in 
+          sum := !sum +. d*.d
+      done;
+      !sum /. (float_of_int (Array.length xs - 1))
+
+  let standard_deviation xs = sqrt (variance xs)
 
   let all_equal compare xs start endd = 
     let x0 = xs.(start) in 
@@ -439,8 +467,7 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
         bs 
         rhos 
         
-  let density_radius n bs = 
-    let rhos = density_squared_estimators n bs in 
+  let density_radius rhos bs = 
     let dc = density_center rhos bs in 
     let rtot = Array.fold_left (+.) 0.0 rhos in 
       fold_left2 
@@ -451,8 +478,7 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
         bs
         rhos
 
-  let density_density n bs = 
-    let rhos = density_squared_estimators n bs in 
+  let density_density rhos bs = 
     let rho_tot = Array.fold_left (+.) 0.0 rhos in 
       Array.fold_left 
         (fun dd r -> 
@@ -466,7 +492,8 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
      But, if m_c = 4/3*pi*rho_c*r_c^3, then we have t_cr =
      1/(4/3*pi*rho_c)^(1/2). *)
   let core_crossing_time n bs = 
-    let rhoc = density_density n bs in 
+    let rhos = density_squared_estimators n bs in
+    let rhoc = density_density rhos bs in 
     1.0/.(sqrt ((4.0/.3.0)*.pi*.rhoc))
 
   let total_momentum bs = 

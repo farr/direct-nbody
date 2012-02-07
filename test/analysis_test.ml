@@ -17,7 +17,8 @@ let test_neighbors () =
 
 let test_density_radius () = 
   let bs = Ic.make_plummer 10000 in 
-  let r = An.density_radius 6 bs in 
+  let rhos = An.density_squared_estimators 6 bs in 
+  let r = An.density_radius rhos bs in 
   let rexact = 189.0 /. 640.0 in
     Printf.fprintf stderr "r = %g\n" r;
     assert_bool "r too large" (r < 2.0*.rexact);
