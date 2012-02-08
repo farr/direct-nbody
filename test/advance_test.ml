@@ -30,5 +30,27 @@ let test_energy_error () =
       e1
       e0
 
+(* Plummer model plus M = 1 central Plummer potential with eps = 0.1. *)
+let test_external_potential () = 
+  let n = 100 in 
+  let bs = Ic.rescale_to_standard_units (Ic.make_plummer n) in 
+    Base.set_eps (4.0 /. (float_of_int n));
+  let v b = 
+    let m = b.B.m and r = Base.norm (b.B.q) in 
+    let r2 = r*.r +. 0.01 in (* r^2 + eps^2 with eps = 0.1 *)
+    ~-.m /. (sqrt r2) in 
+  let gv b = 
+    let m = b.B.m and r = Base.norm b.B.q in 
+    let r2 = r*.r +. 0.01 in 
+    let r3 = r2*.(sqrt r2) in 
+      Array.map (fun x -> m*.x/.r3) b.B.q in 
+  let bs2 = Ad.advance ~extpot:gv bs 1.0 1e-2 in 
+  let e0 = E.energy bs +. (E.total_external_energy v bs) and 
+      e1 = E.energy bs2 +. (E.total_external_energy v bs2) in 
+    Base.set_eps 0.0;
+  let de = abs_float ((e1 -. e0) /. e0) in 
+    assert_bool (Printf.sprintf "energy error too large: %g" de) (de < 1e-2)
+
 let tests = "advancer.ml tests" >:::
-  ["energy error test" >:: test_energy_error]
+  ["energy error test" >:: test_energy_error;
+   "external potential test" >:: test_external_potential]
