@@ -20,14 +20,15 @@ let test_energy_error () =
   let r = de2 /. de1 in 
   let r_exact = 10.0**(4.0/.3.0) in
   let ratio = r /. r_exact in 
-(* Ensure within 1/2 logarithmic order of magnitude *)
-  assert_bool "ratio too small" (ratio > (sqrt 0.1)); 
-  assert_bool "ratio too big" (ratio < (sqrt 10.0));
-  assert_equal ~msg:"energy error too big" 
-    ~cmp:(cmp_float ~epsabs:0.0 ~epsrel:1e-6)
-    ~printer:string_of_float
-    e1
-    e0
+    Base.set_eps 0.0;
+  (* Ensure within 1/2 logarithmic order of magnitude *)
+    assert_bool "ratio too small" (ratio > (sqrt 0.1)); 
+    assert_bool "ratio too big" (ratio < (sqrt 10.0));
+    assert_equal ~msg:"energy error too big" 
+      ~cmp:(cmp_float ~epsabs:0.0 ~epsrel:1e-6)
+      ~printer:string_of_float
+      e1
+      e0
 
 let tests = "advancer.ml tests" >:::
-  [(* "energy error test" >:: test_energy_error *)]
+  ["energy error test" >:: test_energy_error]

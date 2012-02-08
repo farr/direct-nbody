@@ -19,7 +19,7 @@ open Base;;
 
 module type ADVANCER = sig
   type b
-  val advance : ?extpot : (float array -> float array) -> b array -> float -> float -> b array
+  val advance : ?extpot : (b -> float array) -> b array -> float -> float -> b array
 end
 
 module A = 
@@ -36,6 +36,7 @@ module A =
         dVdq0 : float array;
         dVdq1 : float array;
         dVdq2 : float array;
+        p0 : float array;
         q0 : float array;
         q1 : float array;
         q2 : float array;
@@ -73,6 +74,7 @@ module A =
        t0 = b.t0;
        h = b.h;
        hmax = b.hmax;
+       p0 = Array.copy b.p0;
        q0 = Array.copy b.q0;
        q1 = Array.copy b.q1;
        q2 = Array.copy b.q2;
@@ -102,6 +104,7 @@ module A =
        t0 = nan;
        h = nan;
        hmax = nan;
+       p0 = Array.make 3 nan;
        q0 = Array.make 3 nan;
        q1 = Array.make 3 nan;
        q2 = Array.make 3 nan;
@@ -137,33 +140,16 @@ module A =
       let print = print
     end)
 
-    let kinetic_energy {m = m; p = p} = 
-      (Base.norm_squared p)/. (2.0 *. m)
-
-    let potential_energy {m = m1; q = q1} {m = m2; q = q2} = 
-      let r = Base.distance q1 q2 in 
-      ~-.m1*.m2/.r
-
-    let energy bs = 
-      let eg = ref 0.0 in 
-      for i = 0 to Array.length bs - 1 do 
-	let b = bs.(i) in 
-	eg := !eg +. (kinetic_energy b);
-	for j = i + 1 to Array.length bs - 1 do 
-	  eg := !eg +. (potential_energy b bs.(j))
-	done
-      done;
-      !eg
-
     let predict_q012 ({m = m; q = q; p = p; 
                        dVdq0 = dVdq0; dVdq1 = dVdq1; dVdq2 = dVdq2; 
-                       h = h; q0 = q0; q1 = q1; q2 = q2} as b)
+                       h = h; p0 = p0; q0 = q0; q1 = q1; q2 = q2} as b)
         hnew = 
       let hnew2 = hnew*.hnew and 
           h2 = h*.h in 
       let hnew3 = hnew2*.hnew and 
           h3 = h2*.h in 
       for i = 0 to 2 do 
+        p0.(i) <- p.(i);
         q0.(i) <- q.(i);
         q1.(i) <- q0.(i) +. hnew*.p.(i)/.(2.0*.m) 
             -. hnew3*.(h+.hnew)/.(8.0*.h3*.m)*.dVdq0.(i) 
@@ -208,6 +194,16 @@ module A =
         b.t <- t
       end
 
+    let predict_all b t = 
+      predict_position b t;
+      let dt = t -. b.t0 and h = b.h in  
+      let c0 = (4.0*.dt -. 3.0*.h)/.(h*.h) and 
+          c1 = 4.0*.(h -. 2.0*.dt)/.(h*.h) and 
+          c2 = (4.0*.dt -. h)/.(h*.h) in 
+        for i = 0 to 2 do 
+          b.p.(i) <- b.m*.(c0*.b.q0.(i) +. c1*.b.q1.(i) +. c2*.b.q2.(i))
+        done
+
     let interact_bodies bs imin imax t vC = 
       let n = Array.length bs in 
       let gv = Array.make 3 0.0 in 
@@ -241,7 +237,7 @@ module A =
             
     let finish_body b t = 
       let q = b.q and m = b.m in 
-      let p = b.p and q0 = b.q0 and h = b.h in 
+      let p = b.p and p0 = b.p0 and q0 = b.q0 and h = b.h in 
       let dVdq0 = b.dVdq0 and dVdq1 = b.dVdq1 and dVdq2 = b.dVdq2 in 
       let cp = h /. m in 
       let cV0 = cp and cV1 = 0.5*.cp in 
@@ -249,7 +245,7 @@ module A =
         let v0i = dVdq0.(i) and 
             v1i = dVdq1.(i) and 
             v2i = dVdq2.(i) and
-            pi = p.(i) in
+            pi = p0.(i) in
         q.(i) <- q0.(i) +. cp*.pi -. cV0*.v0i -. cV1*.v1i;
         p.(i) <- pi -. v0i -. v1i -. v2i
       done;
@@ -303,9 +299,13 @@ module A =
       | None -> ()
       | Some(gradV) -> 
         let h = b.h and 
-            dVdq0 = b.dVdq0 and dVdq1 = b.dVdq1 and dVdq2 = b.dVdq2 and 
-            q0 = b.q0 and q1 = b.q1 and q2 = b.q2 in 
-        let gv0 = gradV q0 and gv1 = gradV q1 and gv2 = gradV q2 in 
+            dVdq0 = b.dVdq0 and dVdq1 = b.dVdq1 and dVdq2 = b.dVdq2 in
+          predict_all b b.t0;
+          let gv0 = gradV b in 
+          predict_all b (b.t0 +. 0.5*.b.h);
+          let gv1 = gradV b in 
+          predict_all b (b.t0 +. b.h);
+          let gv2 = gradV b in
           for i = 0 to 2 do 
             dVdq0.(i) <- dVdq0.(i) +. h*.gv0.(i)/.6.0;
             dVdq1.(i) <- dVdq1.(i) +. 2.0*.h*.gv1.(i)/.3.0;

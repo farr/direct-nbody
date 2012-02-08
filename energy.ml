@@ -47,7 +47,7 @@ sig
 
   (** Total external energy of a system of bodies with the given
       potential. *)
-  val total_external_energy : (float array -> float) -> b array -> float
+  val total_external_energy : (b -> float) -> b array -> float
 end
 
 module Make(B : BODY) : (ENERGY with type b = B.b) = 
@@ -78,5 +78,5 @@ struct
       ke +. pe
 
   let total_external_energy v bs = 
-    Array.fold_left (fun e b -> e +. (v (B.q b))) 0.0 bs
+    Array.fold_left (fun e b -> e +. (v b)) 0.0 bs
 end
