@@ -2,10 +2,10 @@ true: debug
 
 <test> or <bin>: include
 
-<test/*.ml> : use_oUnit
+<test/*.ml> : use_oUnit, use_bigarray, use_gsl
 
-<bin/*.ml> : use_nbody, use_unix
+<bin/*.ml> : use_bigarray, use_gsl, use_nbody
 
-<**/*.ml> or <**/*.{native,byte}> : use_unix, use_nbody
+<**/*.ml> or <**/*.{native,byte}> : use_unix, use_bigarray, use_gsl, use_nbody
 
-<test/*.{native,byte}> : use_unix, use_oUnit
+<test/*.{native,byte}> : use_unix, use_bigarray, use_gsl, use_oUnit
