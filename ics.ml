@@ -104,10 +104,18 @@ module type IC =
         eccentricity thermally distributed. *)
     val random_elements : float -> float -> orbit_elements
 
-  (** [king_r_and_m_samples w0] returns arrays of radii and enclosed
-      masses (scaled to a total mass of 1) for the King model with
-      central potential [w0]. *)
-    val king_r_and_m_samples : float -> (float array) * (float array)
+    (** [king_r_and_m_samples w0] returns arrays of radii and enclosed
+        masses (scaled to a total mass of 1) for the King model with
+        central potential [w0].  The units are chosen so that r_c = 1;
+        the units on m are arbitrary. *)
+    val king_r_and_m_samples : float -> (float array) * (float array) * (float array)
+
+  (** [make_king w0 n] returns a king model in the COM frame with N
+      bodies and central concentration w0.  The units are chosen so
+      that G = 1, M = 1, and the central radius, r_c = 1.  This should
+      be {b nearly} standard units. *)
+    val make_king : float -> int -> b array
+
   end
 
 module Make(B : BODY) : (IC with type b = B.b)  = 
@@ -446,7 +454,7 @@ struct
       let y3 = y2*.y in 
         dydws.(0) <- y; (* dX/dW = Y *)
         dydws.(1) <- 1.0/.x*.(9.0/.4.0*.rho*.y3 +. 3.0/.2.0*.y2); (* dY/dW = 1/X(9/4 rho y^4 + 3/2 y^2) *)
-        dydws.(2) <- 6.2831853071795864769*.y*.rho*.(sqrt x) (* dM/dW = 8 pi rho X^(3/2) Y *)
+        dydws.(2) <- 6.2831853071795864769*.y*.rho*.(sqrt x) (* dM/dW = 8 pi rho X^(1/2) Y *)
 
     (* RHS for King model equations when R >~ 1. *) 
     let large_R_RHS w0 w ys dydws = 
@@ -481,12 +489,13 @@ struct
           sqrt y.(0) 
         else
           1.0 /. y.(0) in 
-      let rec loop system h w ys rs ms = 
+      let rec loop system h w ys rs ms ws = 
         let (w_new, h_new) = Gsl_odeiv.evolve_apply evolve control step system ~t:w ~t1:0.0 ~h:h ~y:ys in 
           if w_new <= 0.0 then 
             (* Done; Normalize the masses, and return. *)
             ((Array.of_list (List.rev ((get_r ys system) :: rs))),
-             (Array.of_list (List.rev (ys.(2) :: ms))))
+             (Array.of_list (List.rev (ys.(2) :: ms))),
+             (Array.of_list (List.rev (w_new :: ws))))
           else
             let r_new = get_r ys system and 
                 r_old = List.hd rs in 
@@ -494,11 +503,59 @@ struct
                 (* Swap X = R^2, P = 1/R. *)
                 xy_state_to_pq_state ys;
                 Gsl_odeiv.step_reset step;
-                loop large_system h_new w_new ys (r_new :: rs) (ys.(2) :: ms)
+                loop large_system h_new w_new ys (r_new :: rs) (ys.(2) :: ms) (w_new :: ws)
               end else begin
                 (* Continue with the same system. *)
-                loop system h_new w_new ys (r_new :: rs) (ys.(2) :: ms)
+                loop system h_new w_new ys (r_new :: rs) (ys.(2) :: ms) (w_new :: ws)
               end in 
-        loop small_system (~-.h0) w ys [get_r ys small_system] [0.0]
+        loop small_system (~-.h0) w ys [get_r ys small_system] [0.0] [w]
               
+    let king_v_cumulative jv jve = 
+      let jv2 = jv*.jv and 
+          jve2 = jve*.jve in
+      let jv3 = jv2 *. jv and 
+          emjv2 = exp (~-.jv2) and 
+          emjve2 = exp (~-.jve2) in
+      3.0*.1.7724538509055160273*.(Gsl_sf.erf jv) -. 6.0*.jv*.emjv2 -. 4.0*.jv3*.emjve2
+
+    let binary_search (x : float) (xs : float array) = 
+      let n = Array.length xs in 
+        assert(x >= xs.(0));
+        assert(x <= xs.(n-1));
+      let rec loop imin imax = 
+        if imax - imin <= 1 then 
+          (imin, imax)
+        else
+          let imid = imin + (imax - imin) / 2 in 
+            if x < xs.(imid) then 
+              loop imin imid
+            else
+              loop imid imax in 
+        loop 0 (n-1)
+
+    let r_from_m m rs ms = 
+      let (imin, imax) = binary_search m ms in 
+      let frac = (ms.(imax) -. m)/.(ms.(imax) -. ms.(imin)) in 
+        rs.(imin) +. frac*.(rs.(imax) -. rs.(imin))
+
+    let j mmax = 0.59841342060214901691*.(sqrt mmax)
+
+    let draw_king_body mbody rs ms = 
+      let n = Array.length ms in 
+      let mmax = ms.(n-1) and
+          rmax = rs.(n-1) in
+      let m = Random.float mmax in 
+      let r = r_from_m m rs ms in 
+      let j = j mmax in 
+      let jve = j*.(sqrt (2.0*.(m/.mmax/.r -. 1.0/.rmax))) in
+      let vfrac = Random.float (king_v_cumulative jve jve) in
+      let jv = bisect_solve 1e-8 (fun jv -> (king_v_cumulative jv jve) -. vfrac) 0.0 jve in
+      let v = jv /. j in 
+        B.make 0.0 m (random_vector r) (random_vector (m*.v))
+
+    let make_king w0 n = 
+      let m = 1.0 /. (float_of_int n) and 
+          (rs,ms,_) = king_r_and_m_samples w0 in 
+        adjust_frame 
+          (Array.init n (fun _ -> draw_king_body m rs ms))
 end

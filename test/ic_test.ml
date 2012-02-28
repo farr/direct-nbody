@@ -89,16 +89,35 @@ let test_generate_binary () =
         | _ -> raise (Failure "generate binary didn't produce two bodies")
   done
 
-let test_king () = 
+let test_king_rs_ms () = 
   let correct_rs_ms = [(2.5, 3.891, 3.934); (3.0, 4.699, 5.182); (4.0, 6.920, 8.102);
                     (9.0, 131.4, 69.89)] in 
     List.iter (fun (w0, rmax, mtot) -> 
-      let (rs, ms) = Ic.king_r_and_m_samples w0 in 
+      let (rs, ms, _) = Ic.king_r_and_m_samples w0 in 
       let n = Array.length rs in 
-        assert_bool "rmax incorrect" (abs_float (rmax -. rs.(n-1)) < 0.2);
+        assert_bool "rmax incorrect" (abs_float (rmax -. rs.(n-1)) < 0.01*.rmax);
         assert_bool (Printf.sprintf "mtot incorrect for w0 = %g; expected %g, got %g" w0 mtot ms.(n-1))
-          (abs_float (mtot -. ms.(n-1)) < 0.1))
+          (abs_float (mtot -. ms.(n-1)) < 0.01*.mtot))
       correct_rs_ms
+
+let test_king_virial () =
+  for i = 0 to 10 do 
+    let w0 = 2.0 +. Random.float 10.0 in 
+    let (rs, ms, ws) = Ic.king_r_and_m_samples w0 in 
+    (* let out = open_out "/tmp/king.dat" in  *)
+    (*   Printf.fprintf stderr "Generating King with w0 = %g\n%!" w0; *)
+    (*   for i = 0 to Array.length rs - 1 do  *)
+    (*     Printf.fprintf out "%g %g %g\n" rs.(i) ms.(i) ws.(i) *)
+    (*   done; *)
+    (*   close_out out; *)
+    let bs = Ic.make_king w0 1000 in 
+      Base.set_eps 0.0;
+      let ke = E.total_kinetic_energy bs and 
+          pe = E.total_potential_energy bs in 
+        assert_bool (Printf.sprintf "outside virial equilibrium, ke = %g, pe = %g, r = %g"
+                       ke pe (ke /. pe))
+          (abs_float ((ke/.pe) +. 0.5) < 0.05) 
+  done
 
 let tests = "ic.ml tests" >:::
   ["plummer model energy test" >:: test_plummer_energies;
@@ -109,4 +128,5 @@ let tests = "ic.ml tests" >:::
    "standard units test" >:: test_standard_units;
    "shift_system test" >:: test_shift_system;
    "generate_binary test" >:: test_generate_binary;
-   "king model test" >:: test_king]
+   "king model test rs and ms" >:: test_king_rs_ms;
+   "king model virial equilibrium test" >:: test_king_virial]
