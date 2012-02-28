@@ -103,6 +103,11 @@ module type IC =
         elements with sma log-distributed between amin and amax,
         eccentricity thermally distributed. *)
     val random_elements : float -> float -> orbit_elements
+
+  (** [king_r_and_m_samples w0] returns arrays of radii and enclosed
+      masses (scaled to a total mass of 1) for the King model with
+      central potential [w0]. *)
+    val king_r_and_m_samples : float -> (float array) * (float array)
   end
 
 module Make(B : BODY) : (IC with type b = B.b)  = 
@@ -423,4 +428,77 @@ struct
       let e = sqrt e2 and 
           i = acos cos_i in 
         {m = m; a = a; e = e; i = i; capom = capom; omega = omega}
-  end
+
+    (* This is an analytic formula for psi(W) from King 1966. *)
+    let psi w = 
+      let sqrt_w = sqrt w in 
+      let sqrt_pi = 1.7724538509055160273 in 
+        0.25*.(3.0*.(exp w)*.sqrt_pi*.(Gsl_sf.erf sqrt_w) -. 2.0*.sqrt_w*.(3.0+.2.0*.w))
+
+    let rho_normalized w0 w = 
+      (psi w) /. (psi w0)
+
+    (* RHS for King model equations when R <~ 1. *)
+    let small_R_RHS w0 w ys dydws = 
+      let x = ys.(0) and y = ys.(1) in 
+      let rho = rho_normalized w0 w in
+      let y2 = y*.y in 
+      let y3 = y2*.y in 
+        dydws.(0) <- y; (* dX/dW = Y *)
+        dydws.(1) <- 1.0/.x*.(9.0/.4.0*.rho*.y3 +. 3.0/.2.0*.y2); (* dY/dW = 1/X(9/4 rho y^4 + 3/2 y^2) *)
+        dydws.(2) <- 6.2831853071795864769*.y*.rho*.(sqrt x) (* dM/dW = 8 pi rho X^(3/2) Y *)
+
+    (* RHS for King model equations when R >~ 1. *) 
+    let large_R_RHS w0 w ys dydws = 
+      let p = ys.(0) and q = ys.(1) in 
+      let p2 = p*.p and q2 = q*.q in 
+      let p4 = p2*.p2 and q3 = q*.q2 in 
+      let rho = rho_normalized w0 w in 
+        dydws.(0) <- q; (* dP/dW = Q *)
+        dydws.(1) <- 9.0*.rho/.p4*.q3; (* dQ/dW = 9 rho Q^3/P^4 *)
+        dydws.(2) <-  (-12.566370614359172954)*.rho*.q/.p4 (* dM/dW = - 4 pi rho Q / P^4 *)
+
+    let xy_state_to_pq_state ys = 
+      let x = ys.(0) and y = ys.(1) in 
+      let x12 = sqrt x in 
+        ys.(0) <- 1.0 /. x12;
+        ys.(1) <- ~-.y /. (2.0*.x*.x12)
+
+    let king_r_and_m_samples w0 = 
+      let eps = 1e-8 in 
+      let h0 = min ((sqrt eps) /. 100.0) (w0 /. 2.0) in 
+      let small_rhs w ys dydws = small_R_RHS w0 w ys dydws and 
+          large_rhs w ys dydws = large_R_RHS w0 w ys dydws in 
+      let small_system = Gsl_odeiv.make_system small_rhs 3 and 
+          large_system = Gsl_odeiv.make_system large_rhs 3 in 
+      let step = Gsl_odeiv.make_step Gsl_odeiv.RK8PD ~dim:3 in
+      let control = Gsl_odeiv.make_control_y_new ~eps_abs:eps ~eps_rel:eps in 
+      let evolve = Gsl_odeiv.make_evolve 3 in 
+      let w = w0 -. h0 in 
+      let ys = [|2.0/.3.0*.h0; -2.0/.3.0; 0.0|] in 
+      let get_r y system = 
+        if system == small_system then 
+          sqrt y.(0) 
+        else
+          1.0 /. y.(0) in 
+      let rec loop system h w ys rs ms = 
+        let (w_new, h_new) = Gsl_odeiv.evolve_apply evolve control step system ~t:w ~t1:0.0 ~h:h ~y:ys in 
+          if w_new <= 0.0 then 
+            (* Done; Normalize the masses, and return. *)
+            ((Array.of_list (List.rev ((get_r ys system) :: rs))),
+             (Array.of_list (List.rev (ys.(2) :: ms))))
+          else
+            let r_new = get_r ys system and 
+                r_old = List.hd rs in 
+              if r_new > 1.0 && r_old <= 1.0 then begin
+                (* Swap X = R^2, P = 1/R. *)
+                xy_state_to_pq_state ys;
+                Gsl_odeiv.step_reset step;
+                loop large_system h_new w_new ys (r_new :: rs) (ys.(2) :: ms)
+              end else begin
+                (* Continue with the same system. *)
+                loop system h_new w_new ys (r_new :: rs) (ys.(2) :: ms)
+              end in 
+        loop small_system (~-.h0) w ys [get_r ys small_system] [0.0]
+              
+end

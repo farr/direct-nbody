@@ -89,6 +89,17 @@ let test_generate_binary () =
         | _ -> raise (Failure "generate binary didn't produce two bodies")
   done
 
+let test_king () = 
+  let correct_rs_ms = [(2.5, 3.891, 3.934); (3.0, 4.699, 5.182); (4.0, 6.920, 8.102);
+                    (9.0, 131.4, 69.89)] in 
+    List.iter (fun (w0, rmax, mtot) -> 
+      let (rs, ms) = Ic.king_r_and_m_samples w0 in 
+      let n = Array.length rs in 
+        assert_bool "rmax incorrect" (abs_float (rmax -. rs.(n-1)) < 0.2);
+        assert_bool (Printf.sprintf "mtot incorrect for w0 = %g; expected %g, got %g" w0 mtot ms.(n-1))
+          (abs_float (mtot -. ms.(n-1)) < 0.1))
+      correct_rs_ms
+
 let tests = "ic.ml tests" >:::
   ["plummer model energy test" >:: test_plummer_energies;
    "make_{hot,cold}_spherical energy test" >:: test_spherical_energies;
@@ -97,4 +108,5 @@ let tests = "ic.ml tests" >:::
    "hot_spherical lagrange radii" >:: test_hot_spherical_lagrange_radii;
    "standard units test" >:: test_standard_units;
    "shift_system test" >:: test_shift_system;
-   "generate_binary test" >:: test_generate_binary]
+   "generate_binary test" >:: test_generate_binary;
+   "king model test" >:: test_king]
