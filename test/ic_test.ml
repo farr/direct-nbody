@@ -112,6 +112,13 @@ let test_king_virial () =
           (abs_float ((ke/.pe) +. 0.5) < 0.05) 
   done
 
+let test_king_core_radius () = 
+  for i = 0 to 10 do 
+    let w0 = 2.0 +. Random.float 10.0 in 
+    let rc = Ic.king_analytic_density_squared_radius w0 in 
+      assert_bool (Printf.sprintf "rc > 1.0 or < 0.5: %g" rc) (0.5 < rc && rc < 1.0)
+  done
+
 let tests = "ic.ml tests" >:::
   ["plummer model energy test" >:: test_plummer_energies;
    "make_{hot,cold}_spherical energy test" >:: test_spherical_energies;
@@ -122,4 +129,5 @@ let tests = "ic.ml tests" >:::
    "shift_system test" >:: test_shift_system;
    "generate_binary test" >:: test_generate_binary;
    "king model test rs and ms" >:: test_king_rs_ms;
-   "king model virial equilibrium test" >:: test_king_virial]
+   "king model virial equilibrium test" >:: test_king_virial;
+   "king model core radius" >:: test_king_core_radius]

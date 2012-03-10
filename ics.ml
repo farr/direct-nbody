@@ -116,6 +116,13 @@ module type IC =
       be {b nearly} standard units. *)
     val make_king : float -> int -> b array
 
+    (** Returns the analytic rho^2 dM weighted radius for a king model
+        with the given central potential. *)
+    val king_analytic_density_squared_radius : float -> float
+
+    (** Returns the fraction of the total mass contained within the
+        {!Ics.IC.king_analytic_density_squared_radius}. *)
+    val king_analytic_density_squared_core_fraction : float -> float
   end
 
 module Make(B : BODY) : (IC with type b = B.b)  = 
@@ -567,4 +574,23 @@ struct
           ws_interp = Gsl_interp.make_interp Gsl_interp.AKIMA ms ws in
       let bs = Array.init n (fun _ -> draw_king_body mbody ms rs_interp ws_interp) in 
         adjust_frame bs
+
+    (* Want to compute the density-squared-weighted king radius
+       (integral done over mass). *)
+    let king_analytic_density_squared_radius w0 = 
+      let (rs, ms, ws) = king_r_and_m_samples w0 in 
+      let mmax = ms.(Array.length ms - 1) in
+      let numerator_integrand = Array.mapi (fun i w -> let rho = rho_normalized w0 w in rs.(i)*.rho*.rho) ws and 
+          denominator_integrand = Array.map (fun w -> let rho = rho_normalized w0 w in rho*.rho) ws in 
+      let num_interp = Gsl_interp.make_interp Gsl_interp.AKIMA ms numerator_integrand and 
+          denom_interp = Gsl_interp.make_interp Gsl_interp.AKIMA ms denominator_integrand in 
+      let num = Gsl_interp.eval_integ num_interp 0.0 mmax and 
+          den = Gsl_interp.eval_integ denom_interp 0.0 mmax in 
+        num /. den
+
+    let king_analytic_density_squared_core_fraction w0 = 
+      let (rs,ms,ws) = king_r_and_m_samples w0 in 
+      let rc = king_analytic_density_squared_radius w0 in 
+      let m_interp = Gsl_interp.make_interp Gsl_interp.AKIMA rs ms in 
+        (Gsl_interp.eval m_interp rc) /. ms.(Array.length ms - 1)
 end
