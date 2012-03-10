@@ -103,13 +103,6 @@ let test_king_rs_ms () =
 let test_king_virial () =
   for i = 0 to 10 do 
     let w0 = 2.0 +. Random.float 10.0 in 
-    let (rs, ms, ws) = Ic.king_r_and_m_samples w0 in 
-    (* let out = open_out "/tmp/king.dat" in  *)
-    (*   Printf.fprintf stderr "Generating King with w0 = %g\n%!" w0; *)
-    (*   for i = 0 to Array.length rs - 1 do  *)
-    (*     Printf.fprintf out "%g %g %g\n" rs.(i) ms.(i) ws.(i) *)
-    (*   done; *)
-    (*   close_out out; *)
     let bs = Ic.make_king w0 1000 in 
       Base.set_eps 0.0;
       let ke = E.total_kinetic_energy bs and 

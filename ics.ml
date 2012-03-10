@@ -335,7 +335,7 @@ struct
         assert (fxmin *. fxmax <= 0.0);
         let dx = xmax -. xmin in 
           if dx <= epsabs then 
-            ~-.fxmin*.dx /. (fxmax -. fxmin)
+            (fxmax*.xmin -. fxmin*.xmax)/.(fxmax -. fxmin)
           else
             let xmid = 0.5*.(xmin +. xmax) in 
             let fxmid = f xmid in 
@@ -453,8 +453,8 @@ struct
       let y2 = y*.y in 
       let y3 = y2*.y in 
         dydws.(0) <- y; (* dX/dW = Y *)
-        dydws.(1) <- 1.0/.x*.(9.0/.4.0*.rho*.y3 +. 3.0/.2.0*.y2); (* dY/dW = 1/X(9/4 rho y^4 + 3/2 y^2) *)
-        dydws.(2) <- 6.2831853071795864769*.y*.rho*.(sqrt x) (* dM/dW = 8 pi rho X^(1/2) Y *)
+        dydws.(1) <- 1.0/.x*.(9.0/.4.0*.rho*.y3 +. 3.0/.2.0*.y2); (* dY/dW = 1/X(9/4 rho y^3 + 3/2 y^2) *)
+        dydws.(2) <- 6.2831853071795864769*.y*.rho*.(sqrt x) (* dM/dW = 2 pi rho X^(1/2) Y *)
 
     (* RHS for King model equations when R >~ 1. *) 
     let large_R_RHS w0 w ys dydws = 
@@ -503,6 +503,7 @@ struct
                 (* Swap X = R^2, P = 1/R. *)
                 xy_state_to_pq_state ys;
                 Gsl_odeiv.step_reset step;
+                Gsl_odeiv.evolve_reset evolve;
                 loop large_system h_new w_new ys (r_new :: rs) (ys.(2) :: ms) (w_new :: ws)
               end else begin
                 (* Continue with the same system. *)
@@ -512,11 +513,12 @@ struct
               
     let king_v_cumulative jv jve = 
       let jv2 = jv*.jv and 
-          jve2 = jve*.jve in
-      let jv3 = jv2 *. jv and 
-          emjv2 = exp (~-.jv2) and 
-          emjve2 = exp (~-.jve2) in
-      3.0*.1.7724538509055160273*.(Gsl_sf.erf jv) -. 6.0*.jv*.emjv2 -. 4.0*.jv3*.emjve2
+          jve2 = jve*.jve in 
+      let jv3 = jv2*.jv and 
+          jve3 = jve2*.jve in 
+      let ejve2 = exp jve2 in 
+        (6.0*.(exp (jve2 -. jv2))*.jv +. 4.0*.jv3 -. 5.3173615527165480819*.ejve2*.(Gsl_sf.erf jv)) /. 
+          (6.0*.jve +. 4.0*.jve3 -. 5.3173615527165480819*.ejve2*.(Gsl_sf.erf jve))
 
     let binary_search (x : float) (xs : float array) = 
       let n = Array.length xs in 
@@ -538,24 +540,31 @@ struct
       let frac = (ms.(imax) -. m)/.(ms.(imax) -. ms.(imin)) in 
         rs.(imin) +. frac*.(rs.(imax) -. rs.(imin))
 
+    let w_from_m m ws ms = 
+      let (imin, imax) = binary_search m ms in 
+      let frac = (ms.(imax) -. m)/.(ms.(imax) -. ms.(imin)) in 
+        ws.(imin) +. frac*.(ws.(imax) -. ws.(imin))
+
     let j mmax = 0.59841342060214901691*.(sqrt mmax)
 
-    let draw_king_body mbody rs ms = 
+    let draw_king_body mbody ms rs_interp ws_interp = 
       let n = Array.length ms in 
-      let mmax = ms.(n-1) and
-          rmax = rs.(n-1) in
+      let mmax = ms.(n-1) in
       let m = Random.float mmax in 
-      let r = r_from_m m rs ms in 
+      let r = Gsl_interp.eval rs_interp m and 
+          w = Gsl_interp.eval ws_interp m in
       let j = j mmax in 
-      let jve = j*.(sqrt (2.0*.(m/.mmax/.r -. 1.0/.rmax))) in
-      let vfrac = Random.float (king_v_cumulative jve jve) in
+      let jve = sqrt w in
+      let vfrac = Random.float 1.0 in
       let jv = bisect_solve 1e-8 (fun jv -> (king_v_cumulative jv jve) -. vfrac) 0.0 jve in
       let v = jv /. j in 
-        B.make 0.0 m (random_vector r) (random_vector (m*.v))
+        B.make 0.0 mbody (random_vector r) (random_vector (mbody*.v))
 
     let make_king w0 n = 
-      let m = 1.0 /. (float_of_int n) and 
-          (rs,ms,_) = king_r_and_m_samples w0 in 
-        adjust_frame 
-          (Array.init n (fun _ -> draw_king_body m rs ms))
+      let mbody = 1.0 /. (float_of_int n) and 
+          (rs,ms,ws) = king_r_and_m_samples w0 in 
+      let rs_interp = Gsl_interp.make_interp Gsl_interp.AKIMA ms rs and 
+          ws_interp = Gsl_interp.make_interp Gsl_interp.AKIMA ms ws in
+      let bs = Array.init n (fun _ -> draw_king_body mbody ms rs_interp ws_interp) in 
+        adjust_frame bs
 end
