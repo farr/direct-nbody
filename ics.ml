@@ -126,6 +126,15 @@ module type IC =
     (** Returns the fraction of the total mass contained within the
         {!Ics.IC.king_analytic_density_squared_radius}. *)
     val king_analytic_density_squared_core_fraction : float -> float
+
+    (** [make_from_cmc_snapshot file] constructs initial conditions
+        from the black holes in a given snapshot file of the CMC code,
+        and returns the external potential due to the other objects in
+        the snapshot.  The units are such that the total mass of black
+        holes = 1, the half-mass radius of the black holes = 1, and G
+        = 1.  The black holes will be translated into the center of
+        momentum frame. *)
+    val make_from_cmc_snapshot : string -> b array * (b -> float array)
   end
 
 module Make(B : BODY) : (IC with type b = B.b)  = 
@@ -597,7 +606,97 @@ struct
       let m_interp = Gsl_interp.make_interp Gsl_interp.AKIMA rs ms in 
         (Gsl_interp.eval m_interp rc) /. ms.(Array.length ms - 1)
 
-    let read_cmc_file chan = 
+    let read_cmc chan = 
       let lexbuf = Lexing.from_channel chan in 
         Cmc_parser.main Cmc_lexer.tokenize lexbuf
+
+    let mi = 1
+    let ri = 2
+    let vri = 3
+    let vti = 4 
+    let sti = 14
+
+    let split_black_holes cmcs = 
+      let bhs = ref [] and 
+          others = ref [] in 
+        for i = 0 to Array.length cmcs - 1 do
+          let star = cmcs.(i) in 
+            if star.(sti) = 14.0 then 
+              bhs := star :: !bhs
+            else
+              others := star :: !others
+        done;
+        (Array.of_list (List.rev !bhs)), (Array.of_list (List.rev !others))
+        
+    let cmc_total_mass cmcs = 
+      let mtot = ref 0.0 in 
+        for i = 0 to Array.length cmcs - 1 do 
+          mtot := !mtot +. cmcs.(i).(mi)
+        done;
+        !mtot +. 0.0
+
+    let cmc_half_mass_radius cmcs = 
+      let mtot = cmc_total_mass cmcs in 
+      let n = Array.length cmcs in
+      let rec loop m i = 
+        if i >= n then 
+          raise (Failure "cmc_half_mass_radius")
+        else
+          let mi = cmcs.(i).(mi) in 
+            if m +. mi > 0.5*.mtot then 
+              cmcs.(i).(ri)
+            else
+              loop (m+.mi) (i+1) in 
+        loop 0.0 0
+
+    let cmc_to_new_units m r cmcs = 
+      for i = 0 to Array.length cmcs - 1 do 
+        let star = cmcs.(i) in 
+          star.(mi) <- star.(mi) /. m;
+          star.(ri) <- star.(ri) /. r
+      done
+
+    let cmc_to_body cmc = 
+      let r = cmc.(ri) and 
+          m = cmc.(mi) and 
+          vr = cmc.(vri) and 
+          vt = cmc.(vti) in 
+      let rhat = random_vector 1.0 in
+      let t = cross rhat (random_vector 1.0) in 
+      let tnorm = norm t in 
+      let r = Array.map (fun x -> r *. x) rhat and 
+          p = Array.mapi (fun i x -> m*.(vr *. x +. vt *. t.(i) /. tnorm)) rhat in 
+        B.make 0.0 m r p
+
+    let cmcs_to_potential cmcs = 
+      let n = Array.length cmcs in
+      let rs = Array.make (n+1) 0.0 and 
+          mencs = Array.make (n+1) 0.0 in 
+      let mtot = ref 0.0 in 
+        for i = 0 to n - 1 do 
+          let star = cmcs.(i) in 
+            mtot := !mtot +. star.(mi);
+            rs.(i+1) <- star.(ri);
+            mencs.(i+1) <- !mtot
+        done;
+        let menc_of_r = Gsl_interp.make_interp Gsl_interp.AKIMA rs mencs in 
+          fun b -> 
+            let q = B.q b in
+            let br = norm q in 
+            let menc = Gsl_interp.eval menc_of_r br in 
+            let fnorm = (B.m b)*.menc/.(br*.br) in 
+              Array.map (fun x -> fnorm*.x/.br) q (* Grad_v is -F, so prop. to rhat. *)
+
+    let make_from_cmc_snapshot file = 
+      let inp = open_in file in 
+      let cmcs = read_cmc inp in 
+        close_in inp;
+        let (bhs, others) = split_black_holes cmcs in 
+        let mscale = cmc_total_mass bhs and 
+            rscale = cmc_half_mass_radius bhs in 
+          cmc_to_new_units mscale rscale bhs;
+          cmc_to_new_units mscale rscale others;
+          let pot = cmcs_to_potential others in 
+          let bs = Array.map cmc_to_body bhs in 
+            (adjust_frame bs), pot
 end
