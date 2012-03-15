@@ -127,14 +127,13 @@ module type IC =
         {!Ics.IC.king_analytic_density_squared_radius}. *)
     val king_analytic_density_squared_core_fraction : float -> float
 
-    (** [make_from_cmc_snapshot file] constructs initial conditions
-        from the black holes in a given snapshot file of the CMC code,
-        and returns the external potential due to the other objects in
-        the snapshot.  The units are such that the total mass of black
-        holes = 1, the half-mass radius of the black holes = 1, and G
-        = 1.  The black holes will be translated into the center of
-        momentum frame. *)
-    val make_from_cmc_snapshot : string -> b array * (b -> float array)
+    (** [make_from_cmc_snapshot file] returns [(bs, v, gradV)].  Where
+        [bs] are the black holes in the cluster, [v] is the potential
+        from the other stars, and [gradV] computes the gradient of v.
+        The units are such that the total mass of black holes = 1, the
+        half-mass radius of the black holes = 1, and G = 1.  The black
+        holes will be translated into the center of momentum frame. *)
+    val make_from_cmc_snapshot : string -> b array * (b -> float) * (b -> float array)
   end
 
 module Make(B : BODY) : (IC with type b = B.b)  = 
@@ -606,15 +605,16 @@ struct
       let m_interp = Gsl_interp.make_interp Gsl_interp.AKIMA rs ms in 
         (Gsl_interp.eval m_interp rc) /. ms.(Array.length ms - 1)
 
-    let read_cmc chan = 
-      let lexbuf = Lexing.from_channel chan in 
-        Cmc_parser.main Cmc_lexer.tokenize lexbuf
-
     let mi = 1
     let ri = 2
     let vri = 3
     let vti = 4 
     let sti = 14
+    let phii = 23
+
+    let read_cmc chan = 
+      let lexbuf = Lexing.from_channel chan in 
+        Cmc_parser.main Cmc_lexer.tokenize lexbuf
 
     let split_black_holes cmcs = 
       let bhs = ref [] and 
@@ -626,7 +626,10 @@ struct
             else
               others := star :: !others
         done;
-        (Array.of_list (List.rev !bhs)), (Array.of_list (List.rev !others))
+        let bhs = Array.of_list (List.rev !bhs) and 
+            others = Array.of_list (List.rev !others) in 
+          Array.fast_sort (fun o1 o2 -> if o1.(ri) < o2.(ri) then -1 else if o1.(ri) > o2.(ri) then 1 else 0) others;
+          (bhs, others)
         
     let cmc_total_mass cmcs = 
       let mtot = ref 0.0 in 
@@ -653,7 +656,9 @@ struct
       for i = 0 to Array.length cmcs - 1 do 
         let star = cmcs.(i) in 
           star.(mi) <- star.(mi) /. m;
-          star.(ri) <- star.(ri) /. r
+          star.(ri) <- star.(ri) /. r;
+          star.(vri) <- star.(vri) /. r;
+          star.(vti) <- star.(vti) /. r
       done
 
     let cmc_to_body cmc = 
@@ -669,6 +674,29 @@ struct
         B.make 0.0 m r p
 
     let cmcs_to_potential cmcs = 
+      let n = Array.length cmcs in 
+      let rs = Array.make (n+1) 0.0 and 
+          fs = Array.make (n+1) 0.0 and 
+          menc = ref 0.0 in
+        for i = 0 to n - 1 do 
+          let star = cmcs.(i) in 
+            rs.(i+1) <- star.(ri);
+            menc := !menc +. star.(mi);
+            fs.(i+1) <- !menc /. (rs.(i+1)*.rs.(i+1));
+            if rs.(i+1) <= rs.(i) then rs.(i+1) <- rs.(i)*.(1.0+.1e-8)
+        done;
+        let mmax = cmcs.(n-1).(mi) and 
+            rmax = cmcs.(n-1).(ri) in
+        let f_of_r = Gsl_interp.make_interp Gsl_interp.AKIMA rs fs in
+          fun b -> 
+            let r = norm (B.q b) and 
+                m = B.m b in 
+              if r > rmax then 
+                ~-.m*.mmax/.r
+              else
+                m*.(~-.(Gsl_interp.eval_integ f_of_r r rmax) -. mmax/.rmax)
+
+    let cmcs_to_gradV cmcs = 
       let n = Array.length cmcs in
       let rs = Array.make (n+1) 0.0 and 
           mencs = Array.make (n+1) 0.0 in 
@@ -677,14 +705,16 @@ struct
           let star = cmcs.(i) in 
             mtot := !mtot +. star.(mi);
             rs.(i+1) <- star.(ri);
-            if (rs.(i+1) <= rs.(i)) then rs.(i+1) <- (1.0 +. 1e-8)*.rs.(i);
+            if rs.(i+1) <= rs.(i) then rs.(i+1) <- (1.0 +. 1e-8)*.rs.(i);
             mencs.(i+1) <- !mtot
         done;
+        let rmax = cmcs.(n-1).(ri) in 
+        let mmax = cmcs.(n-1).(mi) in 
         let menc_of_r = Gsl_interp.make_interp Gsl_interp.AKIMA rs mencs in 
           fun b -> 
             let q = B.q b in
             let br = norm q in 
-            let menc = Gsl_interp.eval menc_of_r br in 
+            let menc = if br > rmax then mmax else Gsl_interp.eval menc_of_r br in 
             let fnorm = (B.m b)*.menc/.(br*.br) in 
               Array.map (fun x -> fnorm*.x/.br) q (* Grad_v is -F, so prop. to rhat. *)
 
@@ -698,6 +728,7 @@ struct
           cmc_to_new_units mscale rscale bhs;
           cmc_to_new_units mscale rscale others;
           let pot = cmcs_to_potential others in 
+          let force = cmcs_to_gradV others in
           let bs = Array.map cmc_to_body bhs in 
-            (adjust_frame bs), pot
+            (adjust_frame bs), pot, force
 end

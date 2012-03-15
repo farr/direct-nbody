@@ -121,8 +121,14 @@ let test_king_core_radius () =
 
 let test_from_cmc_snapshot () = 
   let snap_file = "test/cmc_test_snapshot.dat" in 
-  let (bhs, potential) = Ic.make_from_cmc_snapshot snap_file in 
-    ignore(bhs) (* Just check that the conversion goes well. *)
+  let (bhs, potential, force) = Ic.make_from_cmc_snapshot snap_file in 
+  let pe = Array.fold_left (fun pe b -> pe +. potential b) (E.total_potential_energy bhs) bhs in 
+  let ke = E.total_kinetic_energy bhs in 
+  let vr = abs_float (ke /. pe) in 
+    assert_bool 
+      (Printf.sprintf "virial ratio out of bounds (r = %g; ke = %g, pe = %g)" vr ke pe)
+      (0.25 < vr && vr < 0.75)
+    
 
 let tests = "ic.ml tests" >:::
   ["plummer model energy test" >:: test_plummer_energies;
