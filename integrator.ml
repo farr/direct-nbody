@@ -15,44 +15,61 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
+(** Driver for advancing system by (large) finite time, monitoring
+    progress. *)
+
 open Body;;
 open Base;;
 open Advancer;;
 
+(** Output type of {!Integrator.Make}. *)
 module type INTEGRATOR = 
-  sig
-    type b 
-    exception Eg_err of b array
-    val constant_sf_integrate : ?ci : float -> ?sf : float -> 
-      ?filter : (b array -> b array) -> 
-        ?max_dt : (b array -> float) -> 
-          ?max_eg_err : float -> 
-        b array -> float -> b array
-  end
+sig
+  (** Bodies *)
+  type b 
+
+  (** Raised when the integration has exceeded its energy error bound;
+      the contents are the last good state of the system. *)
+  exception Eg_err of b array
+
+  (** Integrate the system, with checkpoint interval [ci], "safety
+      factor" [sf] by a total time increment.  [filter] is a procedure
+      that will be called after each successful step, and the returned
+      bodies will be used for the next step.  If the accumulated
+      energy error exceeds [max_eg_err], then
+      {!Integrator.INTEGRATOR.Eg_err} will be raised with the last
+      checkpointed state.  Will never take a large step that exceeds
+      {max_dt}. *)
+  val constant_sf_integrate : ?ci : float -> ?sf : float -> 
+    ?filter : (b array -> b array) -> 
+    ?max_dt : (b array -> float) -> 
+    ?max_eg_err : float -> 
+    b array -> float -> b array
+end
 
 module Make(B : BODY)(A : (ADVANCER with type b = B.b)) : (INTEGRATOR with type b = A.b) = 
-  struct 
-    type b = A.b
+struct 
+  type b = A.b
 
-    module Eg = Energy.Make(B)
+  module Eg = Energy.Make(B)
 
-    exception Eg_err of b array
+  exception Eg_err of b array
 
-    let constant_sf_integrate 
-        ?(ci = 1.0) 
-        ?(sf = 2e-3) 
-        ?(filter = fun (bs : b array) -> bs)
-        ?(max_dt = fun (bs : b array) -> infinity)
-        ?(max_eg_err = 1e-2)
-        bs dt = 
-      let e = Eg.energy bs and 
-          stop_t = dt +. (B.t bs.(0)) in 
-      let rec loop bs = 
-        let dt_max = max_dt bs in 
-        let new_bs = A.advance bs (min dt_max ci) sf in 
-        let new_e = Eg.energy new_bs and 
-            new_t = B.t new_bs.(0) in 
-        let eerr = abs_float ((new_e -. e)/.e) in 
+  let constant_sf_integrate 
+      ?(ci = 1.0) 
+      ?(sf = 2e-3) 
+      ?(filter = fun (bs : b array) -> bs)
+      ?(max_dt = fun (bs : b array) -> infinity)
+      ?(max_eg_err = 1e-2)
+      bs dt = 
+    let e = Eg.energy bs and 
+        stop_t = dt +. (B.t bs.(0)) in 
+    let rec loop bs = 
+      let dt_max = max_dt bs in 
+      let new_bs = A.advance bs (min dt_max ci) sf in 
+      let new_e = Eg.energy new_bs and 
+          new_t = B.t new_bs.(0) in 
+      let eerr = abs_float ((new_e -. e)/.e) in 
         if eerr > max_eg_err then 
           raise (Eg_err bs)
         else begin
@@ -66,4 +83,4 @@ module Make(B : BODY)(A : (ADVANCER with type b = B.b)) : (INTEGRATOR with type 
         end in 
       loop bs
         
-  end
+end
