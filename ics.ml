@@ -15,9 +15,12 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
+(** Initial conditions of various types. *)
+
 open Body;;
 open Base;;
 
+(** Output type of the {!Ics.Make} functor. *)
 module type IC = 
   sig
     type b
