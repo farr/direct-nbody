@@ -677,6 +677,7 @@ struct
           let star = cmcs.(i) in 
             mtot := !mtot +. star.(mi);
             rs.(i+1) <- star.(ri);
+            if (rs.(i+1) <= rs.(i)) then rs.(i+1) <- (1.0 +. 1e-8)*.rs.(i);
             mencs.(i+1) <- !mtot
         done;
         let menc_of_r = Gsl_interp.make_interp Gsl_interp.AKIMA rs mencs in 

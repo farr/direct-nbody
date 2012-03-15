@@ -119,6 +119,11 @@ let test_king_core_radius () =
       assert_bool (Printf.sprintf "rc > 1.0 or < 0.5: %g" rc) (0.5 < rc && rc < 1.0)
   done
 
+let test_from_cmc_snapshot () = 
+  let snap_file = "test/cmc_test_snapshot.dat" in 
+  let (bhs, potential) = Ic.make_from_cmc_snapshot snap_file in 
+    ignore(bhs) (* Just check that the conversion goes well. *)
+
 let tests = "ic.ml tests" >:::
   ["plummer model energy test" >:: test_plummer_energies;
    "make_{hot,cold}_spherical energy test" >:: test_spherical_energies;
@@ -130,4 +135,5 @@ let tests = "ic.ml tests" >:::
    "generate_binary test" >:: test_generate_binary;
    "king model test rs and ms" >:: test_king_rs_ms;
    "king model virial equilibrium test" >:: test_king_virial;
-   "king model core radius" >:: test_king_core_radius]
+   "king model core radius" >:: test_king_core_radius;
+   "CMC snapshot test" >:: test_from_cmc_snapshot]
