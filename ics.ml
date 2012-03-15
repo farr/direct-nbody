@@ -103,6 +103,26 @@ module type IC =
         elements with sma log-distributed between amin and amax,
         eccentricity thermally distributed. *)
     val random_elements : float -> float -> orbit_elements
+
+    (** [king_r_and_m_samples w0] returns arrays of radii and enclosed
+        masses (scaled to a total mass of 1) for the King model with
+        central potential [w0].  The units are chosen so that r_c = 1;
+        the units on m are arbitrary. *)
+    val king_r_and_m_samples : float -> (float array) * (float array) * (float array)
+
+  (** [make_king w0 n] returns a king model in the COM frame with N
+      bodies and central concentration w0.  The units are chosen so
+      that G = 1, M = 1, and the central radius, r_c = 1.  This should
+      be {b nearly} standard units. *)
+    val make_king : float -> int -> b array
+
+    (** Returns the analytic rho^2 dM weighted radius for a king model
+        with the given central potential. *)
+    val king_analytic_density_squared_radius : float -> float
+
+    (** Returns the fraction of the total mass contained within the
+        {!Ics.IC.king_analytic_density_squared_radius}. *)
+    val king_analytic_density_squared_core_fraction : float -> float
   end
 
 module Make(B : BODY) : (IC with type b = B.b)  = 
@@ -322,7 +342,7 @@ struct
         assert (fxmin *. fxmax <= 0.0);
         let dx = xmax -. xmin in 
           if dx <= epsabs then 
-            ~-.fxmin*.dx /. (fxmax -. fxmin)
+            (fxmax*.xmin -. fxmin*.xmax)/.(fxmax -. fxmin)
           else
             let xmid = 0.5*.(xmin +. xmax) in 
             let fxmid = f xmid in 
@@ -423,4 +443,154 @@ struct
       let e = sqrt e2 and 
           i = acos cos_i in 
         {m = m; a = a; e = e; i = i; capom = capom; omega = omega}
-  end
+
+    (* This is an analytic formula for psi(W) from King 1966. *)
+    let psi w = 
+      let sqrt_w = sqrt w in 
+      let sqrt_pi = 1.7724538509055160273 in 
+        0.25*.(3.0*.(exp w)*.sqrt_pi*.(Gsl_sf.erf sqrt_w) -. 2.0*.sqrt_w*.(3.0+.2.0*.w))
+
+    let rho_normalized w0 w = 
+      (psi w) /. (psi w0)
+
+    (* RHS for King model equations when R <~ 1. *)
+    let small_R_RHS w0 w ys dydws = 
+      let x = ys.(0) and y = ys.(1) in 
+      let rho = rho_normalized w0 w in
+      let y2 = y*.y in 
+      let y3 = y2*.y in 
+        dydws.(0) <- y; (* dX/dW = Y *)
+        dydws.(1) <- 1.0/.x*.(9.0/.4.0*.rho*.y3 +. 3.0/.2.0*.y2); (* dY/dW = 1/X(9/4 rho y^3 + 3/2 y^2) *)
+        dydws.(2) <- 6.2831853071795864769*.y*.rho*.(sqrt x) (* dM/dW = 2 pi rho X^(1/2) Y *)
+
+    (* RHS for King model equations when R >~ 1. *) 
+    let large_R_RHS w0 w ys dydws = 
+      let p = ys.(0) and q = ys.(1) in 
+      let p2 = p*.p and q2 = q*.q in 
+      let p4 = p2*.p2 and q3 = q*.q2 in 
+      let rho = rho_normalized w0 w in 
+        dydws.(0) <- q; (* dP/dW = Q *)
+        dydws.(1) <- 9.0*.rho/.p4*.q3; (* dQ/dW = 9 rho Q^3/P^4 *)
+        dydws.(2) <-  (-12.566370614359172954)*.rho*.q/.p4 (* dM/dW = - 4 pi rho Q / P^4 *)
+
+    let xy_state_to_pq_state ys = 
+      let x = ys.(0) and y = ys.(1) in 
+      let x12 = sqrt x in 
+        ys.(0) <- 1.0 /. x12;
+        ys.(1) <- ~-.y /. (2.0*.x*.x12)
+
+    let king_r_and_m_samples w0 = 
+      let eps = 1e-8 in 
+      let h0 = min ((sqrt eps) /. 100.0) (w0 /. 2.0) in 
+      let small_rhs w ys dydws = small_R_RHS w0 w ys dydws and 
+          large_rhs w ys dydws = large_R_RHS w0 w ys dydws in 
+      let small_system = Gsl_odeiv.make_system small_rhs 3 and 
+          large_system = Gsl_odeiv.make_system large_rhs 3 in 
+      let step = Gsl_odeiv.make_step Gsl_odeiv.RK8PD ~dim:3 in
+      let control = Gsl_odeiv.make_control_y_new ~eps_abs:eps ~eps_rel:eps in 
+      let evolve = Gsl_odeiv.make_evolve 3 in 
+      let w = w0 -. h0 in 
+      let ys = [|2.0/.3.0*.h0; -2.0/.3.0; 0.0|] in 
+      let get_r y system = 
+        if system == small_system then 
+          sqrt y.(0) 
+        else
+          1.0 /. y.(0) in 
+      let rec loop system h w ys rs ms ws = 
+        let (w_new, h_new) = Gsl_odeiv.evolve_apply evolve control step system ~t:w ~t1:0.0 ~h:h ~y:ys in 
+          if w_new <= 0.0 then 
+            (* Done; Normalize the masses, and return. *)
+            ((Array.of_list (List.rev ((get_r ys system) :: rs))),
+             (Array.of_list (List.rev (ys.(2) :: ms))),
+             (Array.of_list (List.rev (w_new :: ws))))
+          else
+            let r_new = get_r ys system and 
+                r_old = List.hd rs in 
+              if r_new > 1.0 && r_old <= 1.0 then begin
+                (* Swap X = R^2, P = 1/R. *)
+                xy_state_to_pq_state ys;
+                Gsl_odeiv.step_reset step;
+                Gsl_odeiv.evolve_reset evolve;
+                loop large_system h_new w_new ys (r_new :: rs) (ys.(2) :: ms) (w_new :: ws)
+              end else begin
+                (* Continue with the same system. *)
+                loop system h_new w_new ys (r_new :: rs) (ys.(2) :: ms) (w_new :: ws)
+              end in 
+        loop small_system (~-.h0) w ys [get_r ys small_system] [0.0] [w]
+              
+    let king_v_cumulative jv jve = 
+      let jv2 = jv*.jv and 
+          jve2 = jve*.jve in 
+      let jv3 = jv2*.jv and 
+          jve3 = jve2*.jve in 
+      let ejve2 = exp jve2 in 
+        (6.0*.(exp (jve2 -. jv2))*.jv +. 4.0*.jv3 -. 5.3173615527165480819*.ejve2*.(Gsl_sf.erf jv)) /. 
+          (6.0*.jve +. 4.0*.jve3 -. 5.3173615527165480819*.ejve2*.(Gsl_sf.erf jve))
+
+    let binary_search (x : float) (xs : float array) = 
+      let n = Array.length xs in 
+        assert(x >= xs.(0));
+        assert(x <= xs.(n-1));
+      let rec loop imin imax = 
+        if imax - imin <= 1 then 
+          (imin, imax)
+        else
+          let imid = imin + (imax - imin) / 2 in 
+            if x < xs.(imid) then 
+              loop imin imid
+            else
+              loop imid imax in 
+        loop 0 (n-1)
+
+    let r_from_m m rs ms = 
+      let (imin, imax) = binary_search m ms in 
+      let frac = (ms.(imax) -. m)/.(ms.(imax) -. ms.(imin)) in 
+        rs.(imin) +. frac*.(rs.(imax) -. rs.(imin))
+
+    let w_from_m m ws ms = 
+      let (imin, imax) = binary_search m ms in 
+      let frac = (ms.(imax) -. m)/.(ms.(imax) -. ms.(imin)) in 
+        ws.(imin) +. frac*.(ws.(imax) -. ws.(imin))
+
+    let j mmax = 0.59841342060214901691*.(sqrt mmax)
+
+    let draw_king_body mbody ms rs_interp ws_interp = 
+      let n = Array.length ms in 
+      let mmax = ms.(n-1) in
+      let m = Random.float mmax in 
+      let r = Gsl_interp.eval rs_interp m and 
+          w = Gsl_interp.eval ws_interp m in
+      let j = j mmax in 
+      let jve = sqrt w in
+      let vfrac = Random.float 1.0 in
+      let jv = bisect_solve 1e-8 (fun jv -> (king_v_cumulative jv jve) -. vfrac) 0.0 jve in
+      let v = jv /. j in 
+        B.make 0.0 mbody (random_vector r) (random_vector (mbody*.v))
+
+    let make_king w0 n = 
+      let mbody = 1.0 /. (float_of_int n) and 
+          (rs,ms,ws) = king_r_and_m_samples w0 in 
+      let rs_interp = Gsl_interp.make_interp Gsl_interp.AKIMA ms rs and 
+          ws_interp = Gsl_interp.make_interp Gsl_interp.AKIMA ms ws in
+      let bs = Array.init n (fun _ -> draw_king_body mbody ms rs_interp ws_interp) in 
+        adjust_frame bs
+
+    (* Want to compute the density-squared-weighted king radius
+       (integral done over mass). *)
+    let king_analytic_density_squared_radius w0 = 
+      let (rs, ms, ws) = king_r_and_m_samples w0 in 
+      let mmax = ms.(Array.length ms - 1) in
+      let numerator_integrand = Array.mapi (fun i w -> let rho = rho_normalized w0 w in rs.(i)*.rho*.rho) ws and 
+          denominator_integrand = Array.map (fun w -> let rho = rho_normalized w0 w in rho*.rho) ws in 
+      let num_interp = Gsl_interp.make_interp Gsl_interp.AKIMA ms numerator_integrand and 
+          denom_interp = Gsl_interp.make_interp Gsl_interp.AKIMA ms denominator_integrand in 
+      let num = Gsl_interp.eval_integ num_interp 0.0 mmax and 
+          den = Gsl_interp.eval_integ denom_interp 0.0 mmax in 
+        num /. den
+
+    let king_analytic_density_squared_core_fraction w0 = 
+      let (rs,ms,ws) = king_r_and_m_samples w0 in 
+      let rc = king_analytic_density_squared_radius w0 in 
+      let m_interp = Gsl_interp.make_interp Gsl_interp.AKIMA rs ms in 
+        (Gsl_interp.eval m_interp rc) /. ms.(Array.length ms - 1)
+end
