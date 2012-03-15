@@ -107,16 +107,16 @@ module type IC =
         eccentricity thermally distributed. *)
     val random_elements : float -> float -> orbit_elements
 
-    (** [king_r_and_m_samples w0] returns arrays of radii and enclosed
-        masses (scaled to a total mass of 1) for the King model with
-        central potential [w0].  The units are chosen so that r_c = 1;
-        the units on m are arbitrary. *)
+    (** [king_r_and_m_samples w0] returns (rs, ms, ws), radii, masses,
+        and potential values for a King model with central potential
+        w0.  The units are such that the central density is 1, the
+        core radius is 1, and G = 1. *)
     val king_r_and_m_samples : float -> (float array) * (float array) * (float array)
 
-  (** [make_king w0 n] returns a king model in the COM frame with N
-      bodies and central concentration w0.  The units are chosen so
-      that G = 1, M = 1, and the central radius, r_c = 1.  This should
-      be {b nearly} standard units. *)
+    (** [make_king w0 n] returns a king model in the COM frame with N
+        bodies and central concentration w0.  The units are chosen so
+        that G = 1, M = 1, and the central radius, r_c = 1.  This should
+        be {b nearly} standard units. *)
     val make_king : float -> int -> b array
 
     (** Returns the analytic rho^2 dM weighted radius for a king model
@@ -596,4 +596,8 @@ struct
       let rc = king_analytic_density_squared_radius w0 in 
       let m_interp = Gsl_interp.make_interp Gsl_interp.AKIMA rs ms in 
         (Gsl_interp.eval m_interp rc) /. ms.(Array.length ms - 1)
+
+    let read_cmc_file chan = 
+      let lexbuf = Lexing.from_channel chan in 
+        Cmc_parser.main Cmc_lexer.tokenize lexbuf
 end
