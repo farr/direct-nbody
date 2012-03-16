@@ -166,6 +166,11 @@ module type ANALYSIS = sig
       binding energy. *)
   val binaries : b array -> ((b * b) * float) list
 
+  (** [binaries_threshold eg bs] returns a list of all binaries and
+      their binding energies [\[(b1, b2, e)\]] that are more tightly
+      bound than the [eg] threshold. *)
+  val binaries_threshold : float -> b array -> (b * b * float) array
+
   (** Returns the most tightly bound binary in the system. *)
   val tightest_binary : b array -> b * b 
 
@@ -840,6 +845,20 @@ module Make (B : Body.BODY) : ANALYSIS with type b = B.b = struct
       done
     done;
     !binaries
+
+  let binaries_threshold eg bs = 
+    let binaries = ref [] in 
+    let n = Array.length bs in 
+      for i = 0 to n - 1 do 
+        let bi = bs.(i) in
+          for j = (i+1) to n - 1 do 
+            let bj = bs.(j) in 
+            let e = binary_energy bi bj in 
+              if e < ~-.(abs_float eg) then 
+                binaries := (bi, bj, e) :: !binaries
+          done
+      done;
+      Array.of_list !binaries
 
   let tightest_binary bs = 
     let bins = binaries bs in 
