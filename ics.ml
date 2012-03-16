@@ -127,13 +127,15 @@ module type IC =
         {!Ics.IC.king_analytic_density_squared_radius}. *)
     val king_analytic_density_squared_core_fraction : float -> float
 
-    (** [make_from_cmc_snapshot file] returns [(bs, v, gradV)].  Where
-        [bs] are the black holes in the cluster, [v] is the potential
-        from the other stars, and [gradV] computes the gradient of v.
-        The units are such that the total mass of black holes = 1, the
-        half-mass radius of the black holes = 1, and G = 1.  The black
-        holes will be translated into the center of momentum frame. *)
-    val make_from_cmc_snapshot : string -> b array * (b -> float) * (b -> float array)
+    (** [make_from_cmc_snapshot file] returns [(bs, v, gradV, mscale,
+        rscale)].  Where [bs] are the black holes in the cluster, [v]
+        is the potential from the other stars, and [gradV] computes
+        the gradient of v.  The units are such that the total mass of
+        black holes = 1, the half-mass radius of the black holes = 1,
+        and G = 1.  [mscale] and [rscale] are the total original mass
+        and original half-mass radius.  The black holes will be
+        translated into the center of momentum frame. *)
+    val make_from_cmc_snapshot : string -> b array * (b -> float) * (b -> float array) * float * float
   end
 
 module Make(B : BODY) : (IC with type b = B.b)  = 
@@ -730,5 +732,5 @@ struct
           let pot = cmcs_to_potential others in 
           let force = cmcs_to_gradV others in
           let bs = Array.map cmc_to_body bhs in 
-            (adjust_frame bs), pot, force
+            (adjust_frame bs), pot, force, mscale, rscale
 end
