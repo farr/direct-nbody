@@ -1,5 +1,5 @@
 (*  ics.ml: Generate initial conditions from various distributions.
-    Copyright (C) 2006--2008 Will M. Farr <farr@mit.edu>
+    Copyright (C) 2006--2012 Will M. Farr <farr@mit.edu>
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
