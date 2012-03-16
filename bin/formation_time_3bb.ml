@@ -53,14 +53,16 @@ let filter e0 energy bs =
     let binaries = dump_and_get_binaries kt bin bs in 
       close_out snap;
       close_out bin;
-      let kT_threshold = !threshold *. kt in 
-      let e_tight = tightest_binary_energy binaries in 
-        if abs_float e_tight > kT_threshold then 
-          raise (Tight_binary(bs, e_tight))
-        else if abs_float (((energy bs) -. e0) /. e0) > !de_max then 
-          raise (Energy_error bs)
-        else
-          bs
+      let e = energy bs in 
+        Printf.eprintf "T = %g; E = %g; dE/E = %g\n" t e (abs_float ((e-.e0)/.e0));
+        let kT_threshold = !threshold *. kt in 
+        let e_tight = tightest_binary_energy binaries in 
+          if abs_float e_tight > kT_threshold then 
+            raise (Tight_binary(bs, e_tight))
+          else if abs_float ((e -. e0) /. e0) > !de_max then 
+            raise (Energy_error bs)
+          else
+            bs
 
 let _ = 
   Base.set_eps 0.0;
