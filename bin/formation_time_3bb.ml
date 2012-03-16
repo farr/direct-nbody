@@ -70,7 +70,7 @@ let filter e0 energy bs =
       close_out snap;
       close_out bin;
       let e = energy bs in 
-        Printf.eprintf "T = %g; E = %g; dE/E = %g\n" t e (abs_float ((e-.e0)/.e0));
+        Printf.eprintf "T = %g; E = %g; dE/E = %g\n%!" t e (abs_float ((e-.e0)/.e0));
         let kT_threshold = !threshold *. kt in 
         let e_tight = tightest_binary_energy binaries in 
           if abs_float e_tight > kT_threshold then 
