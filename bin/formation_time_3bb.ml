@@ -75,8 +75,16 @@ let filter e0 energy rc_file mscale rscale bs =
       let snap = open_out (Printf.sprintf "%s/snapshot-%g.dat" !outdir t) and 
           bin = open_out (Printf.sprintf "%s/binaries-%g.dat" !outdir t) and
           rho2s = An.density_squared_estimators !nnbr bs in 
-      let rc = An.density_radius rho2s bs in 
-        Printf.fprintf rc_file "%g %g %g %g\n%!" t (t*.(tscale mscale rscale)) rc (rc*.rscale);        
+      let rc = An.density_radius rho2s bs and 
+          r10 = An.lagrange_radius bs 0.1 and 
+          r50 = An.lagrange_radius bs 0.5 and 
+          r90 = An.lagrange_radius bs 0.9 in 
+        Printf.fprintf rc_file "%g %g %g %g %g %g %g %g %g %g\n%!" 
+          t (t*.(tscale mscale rscale)) 
+          rc (rc*.rscale)
+          r10 (r10*.rscale)
+          r50 (r50*.rscale)
+          r90 (r90*.rscale);
         dump_snapshot snap bs;
         let binaries = dump_and_get_binaries kt bin bs in 
           close_out snap;
@@ -105,7 +113,7 @@ let _ =
   let energy bs = Array.fold_left (fun e b -> e +. (v b)) (E.energy bs) bs in 
   let e0 = energy bs in 
   let rc_file = open_out (Printf.sprintf "%s/rc.dat" !outdir) in
-    Printf.fprintf rc_file "# T_NB T_CMC RC_NB RC_CMC\n";
+    Printf.fprintf rc_file "# T_NB T_CMC RC_NB RC_CMC L10_NB L10_CMC L50_NB L50_CMC L90_NB L90_CMC\n";
     try 
       let rec loop bs = 
         loop (A.advance ~extpot:gradV (filter e0 energy rc_file mscale rscale bs) !dt !eta) in 

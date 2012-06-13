@@ -2,6 +2,8 @@ Advancer
 Analysis
 Base
 Body
+Cmc_lexer
+Cmc_parser
 Energy
 Hermite
 Ics
