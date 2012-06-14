@@ -27,6 +27,7 @@ let de_max = ref 0.01
 let eta = ref 1e-3
 let dt = ref 0.1
 let nnbr = ref 6
+let dtstop = ref infinity
 
 let options = 
   [("-outpath", Arg.Set_string outdir, "DIR directory for output");
@@ -34,7 +35,8 @@ let options =
    ("-threshold", Arg.Set_float threshold, "E threshold for 'hard' binary (in units of kT)");
    ("-de", Arg.Set_float de_max, "DE max allowed fractional energy error");
    ("-eta", Arg.Set_float eta, "ETA accuracy parameter");
-   ("-dt", Arg.Set_float dt, "DT checkpoint timestep");
+   ("-dt", Arg.Set_float dt, "DT checkpoint timestep (N-body time units)");
+   ("-dtstop", Arg.Set_float dtstop, "DT (units are same as snapshot time)");
    ("-binthresh", Arg.Set_float bin_out_threshold, "E threshold for binary output (in units of kT)");
    ("-nnbr", Arg.Set_int nnbr, "N number of neighbors used to estimate density")]
 
@@ -61,6 +63,7 @@ let tightest_binary_energy binaries =
 
 exception Tight_binary of A.b array * float
 exception Energy_error of A.b array
+exception Time_elapsed of A.b array
 
 let tscale ms rs = rs**1.5 /. (sqrt ms)
 
@@ -93,6 +96,8 @@ let filter e0 energy rc_file mscale rscale bs =
           let e_tight = tightest_binary_energy binaries in 
             if abs_float e_tight > kT_threshold then 
               raise (Tight_binary(bs, e_tight))
+            else if t*.(tscale mscale rscale) >= !dtstop then 
+              raise (Time_elapsed bs)
             else
               bs
     end
@@ -132,3 +137,6 @@ let _ =
           close_out out;
           close_out rc_file;
           exit 0
+      | Time_elapsed(bs) -> 
+        close_out rc_file;
+        exit 0
